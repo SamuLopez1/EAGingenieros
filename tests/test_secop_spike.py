@@ -12,6 +12,7 @@ from scripts.secop_spike import (
     HttpStatusError,
     NetworkError,
     ResponseSizeError,
+    ResponseFormatError,
     UnsafeUrlError,
     build_where,
     candidate_document_urls,
@@ -46,6 +47,21 @@ class ScriptedOpener:
         if isinstance(outcome, BaseException):
             raise outcome
         return outcome
+
+
+class StatusOnlyResponse:
+    """Respuesta mínima que expone status, pero no getcode()."""
+
+    def __init__(self, body: bytes, headers: dict[str, str] | None = None):
+        self.status = 200
+        self.headers = headers or {}
+        self._body = BytesIO(body)
+
+    def read(self, size: int = -1) -> bytes:
+        return self._body.read(size)
+
+    def close(self) -> None:
+        self._body.close()
 
 
 class PagingClient:
@@ -123,6 +139,14 @@ class SecopSpikeTests(unittest.TestCase):
         client = HttpClient(0.1, opener=ScriptedOpener([FakeResponse(b"12345", headers={"Content-Length": "5"})]))
         with self.assertRaises(ResponseSizeError):
             client.read_bytes("https://www.datos.gov.co/file.pdf", {"www.datos.gov.co"}, max_bytes=4)
+
+    def test_status_only_response_and_invalid_content_length(self):
+        client = HttpClient(0.1, opener=ScriptedOpener([StatusOnlyResponse(b"{}")]))
+        self.assertEqual(client.get_json("https://www.datos.gov.co/resource/demo.json", {"www.datos.gov.co"}), {})
+
+        client = HttpClient(0.1, opener=ScriptedOpener([FakeResponse(b"{}", headers={"Content-Length": "not-a-number"})]))
+        with self.assertRaisesRegex(ResponseFormatError, "Content-Length"):
+            client.get_json("https://www.datos.gov.co/resource/demo.json", {"www.datos.gov.co"})
 
     def test_json_response_is_decoded(self):
         client = HttpClient(0.1, opener=ScriptedOpener([FakeResponse(json.dumps([{"id": "a"}]).encode())]))

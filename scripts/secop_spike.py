@@ -154,7 +154,14 @@ class HttpClient:
                 raise NetworkError("timeout") from error
 
             try:
-                status = getattr(response, "status", response.getcode())
+                status = getattr(response, "status", None)
+                if status is None:
+                    getcode = getattr(response, "getcode", None)
+                    if not callable(getcode):
+                        raise ResponseFormatError("respuesta HTTP sin código de estado")
+                    status = getcode()
+                if not isinstance(status, int):
+                    raise ResponseFormatError("código de estado HTTP inválido")
                 headers = getattr(response, "headers", None)
                 if 300 <= status < 400:
                     location = _header(headers, "Location")
@@ -165,8 +172,15 @@ class HttpClient:
                 if status >= 400:
                     raise HttpStatusError(status, _header(headers, "Retry-After"))
                 content_length = _header(headers, "Content-Length")
-                if content_length and int(content_length) > max_bytes:
-                    raise ResponseSizeError("respuesta supera el límite configurado")
+                if content_length:
+                    try:
+                        declared_size = int(content_length)
+                    except (TypeError, ValueError) as error:
+                        raise ResponseFormatError("Content-Length inválido") from error
+                    if declared_size < 0:
+                        raise ResponseFormatError("Content-Length inválido")
+                    if declared_size > max_bytes:
+                        raise ResponseSizeError("respuesta supera el límite configurado")
                 body = response.read(max_bytes + 1)
                 if len(body) > max_bytes:
                     raise ResponseSizeError("respuesta supera el límite configurado")
