@@ -1,6 +1,7 @@
 fastapi
 pydantic
 pydantic-settings
+PyJWT[crypto]==2.10.1
 uvicorn
 httpx
 pytest

@@ -1,9 +1,11 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
+import type { AuthClient } from "./auth";
 
 afterEach(() => {
+  cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -12,7 +14,7 @@ describe("App", () => {
   it("renders the initial loading state", () => {
     render(<App loadHealth={() => new Promise(() => undefined)} />);
 
-    expect(screen.getByRole("status")).toHaveTextContent("Comprobando conexión con la API");
+    expect(screen.getByText("Comprobando conexión con la API…")).toBeInTheDocument();
   });
 
   it("renders a successful API health response", async () => {
@@ -36,6 +38,54 @@ describe("App", () => {
   it("renders an error when the API request fails", async () => {
     render(<App loadHealth={async () => Promise.reject(new Error("offline"))} />);
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("No fue posible comprobar la conexión");
+    expect(await screen.findByText("No fue posible comprobar la conexión con la API.")).toBeInTheDocument();
+  });
+
+  it("shows an invite-only login and never a public registration action", async () => {
+    const authClient: AuthClient = {
+      loadSession: async () => ({ kind: "anonymous" }),
+      requestSignIn: vi.fn().mockResolvedValue(undefined),
+      signOut: vi.fn(),
+    };
+    render(<App authClient={authClient} loadHealth={async () => ({ status: "ok", version: "test", environment: "test" })} />);
+
+    expect(await screen.findByRole("button", { name: "Solicitar enlace de acceso" })).toBeInTheDocument();
+    expect(screen.queryByText(/registrarse/i)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Correo invitado"), { target: { value: "user@example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "Solicitar enlace de acceso" }));
+
+    expect(authClient.requestSignIn).toHaveBeenCalledWith("user@example.com");
+    expect(await screen.findByText(/Si tu invitación está vigente/)).toBeInTheDocument();
+  });
+
+  it("shows the server-assigned role and allows logout", async () => {
+    const authClient: AuthClient = {
+      loadSession: async () => ({
+        kind: "authenticated",
+        organizationId: "00000000-0000-0000-0000-000000000001",
+        role: "analista",
+      }),
+      requestSignIn: vi.fn(),
+      signOut: vi.fn().mockResolvedValue(undefined),
+    };
+    render(<App authClient={authClient} loadHealth={async () => ({ status: "ok", version: "test", environment: "test" })} />);
+
+    expect(await screen.findByText("Rol asignado por el servidor: analista.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar sesión" }));
+
+    expect(authClient.signOut).toHaveBeenCalledOnce();
+    expect(await screen.findByRole("button", { name: "Solicitar enlace de acceso" })).toBeInTheDocument();
+  });
+
+  it("identifies an unavailable Supabase configuration without exposing a secret", async () => {
+    const authClient: AuthClient = {
+      loadSession: async () => ({ kind: "configuration-required" }),
+      requestSignIn: vi.fn(),
+      signOut: vi.fn(),
+    };
+    render(<App authClient={authClient} loadHealth={async () => ({ status: "ok", version: "test", environment: "test" })} />);
+
+    expect(await screen.findByText(/pendiente de configuración por EAG/)).toBeInTheDocument();
+    expect(screen.queryByText(/service_role/i)).not.toBeInTheDocument();
   });
 });

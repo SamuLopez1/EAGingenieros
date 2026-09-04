@@ -46,6 +46,7 @@ def test_cors_allows_only_configured_origin() -> None:
 
     assert allowed.status_code == 200
     assert allowed.headers["access-control-allow-origin"] == "http://localhost:5173"
+    assert "authorization" in allowed.headers["access-control-allow-headers"].lower()
     assert rejected.status_code == 400
     assert "access-control-allow-origin" not in rejected.headers
 

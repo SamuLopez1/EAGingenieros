@@ -5,8 +5,9 @@ from __future__ import annotations
 from functools import cached_property
 from typing import Literal
 from urllib.parse import urlparse
+from uuid import UUID
 
-from pydantic import AnyHttpUrl, Field, field_validator
+from pydantic import AnyHttpUrl, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,6 +24,15 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     environment: Literal["development", "test", "production"] = "development"
     cors_allowed_origins: list[AnyHttpUrl] = Field(default_factory=list)
+    # Ninguno de estos valores se entrega mediante rutas de la API. Las claves
+    # de servicio solo viven en el proceso del backend.
+    supabase_url: AnyHttpUrl | None = None
+    supabase_publishable_key: SecretStr | None = None
+    supabase_service_role_key: SecretStr | None = None
+    auth_jwks_url: AnyHttpUrl | None = None
+    auth_issuer: str | None = None
+    auth_audience: str | None = None
+    initial_organization_id: UUID = UUID("00000000-0000-0000-0000-000000000001")
 
     @field_validator("cors_allowed_origins", mode="before")
     @classmethod
@@ -56,3 +66,21 @@ class Settings(BaseSettings):
             port = f":{origin.port}" if origin.port and not default_port else ""
             origins.append(f"{origin.scheme}://{origin.host}{port}")
         return origins
+
+    @property
+    def jwt_validation_is_configured(self) -> bool:
+        """Indica si existen todos los valores para validar un JWT remoto."""
+
+        return all((self.auth_jwks_url, self.auth_issuer, self.auth_audience))
+
+    @property
+    def supabase_invites_are_configured(self) -> bool:
+        """Las invitaciones requieren URL y clave privilegiada solo en backend."""
+
+        return bool(self.supabase_url and self.supabase_service_role_key)
+
+    @property
+    def supabase_memberships_are_configured(self) -> bool:
+        """Resolver pertenencias usa la clave publicable y el JWT del usuario."""
+
+        return bool(self.supabase_url and self.supabase_publishable_key)

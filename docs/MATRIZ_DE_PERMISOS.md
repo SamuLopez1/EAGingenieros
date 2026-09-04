@@ -1,0 +1,51 @@
+# Matriz de permisos inicial
+
+> Estado: contrato técnico de MVP-04. No confirma que EAG haya configurado
+> Supabase, creado usuarios ni autorizado una matriz empresarial definitiva.
+
+La única organización inicial prevista es `EAG`, con identificador técnico
+`00000000-0000-0000-0000-000000000001` en la migración. Ese identificador no
+representa un dato de negocio ni un usuario real.
+
+| Acción | Anónimo | Analista | Administrador | Servidor con clave de servicio |
+| --- | --- | --- | --- | --- |
+| Consultar `/health` y OpenAPI | Sí | Sí | Sí | Sí |
+| Consultar la sesión y su pertenencia a EAG | No, 401 | Solo la propia | Solo la propia | Solo para operación controlada |
+| Consultar datos de otra organización | No | No, 403 | No, 403 | Solo en procedimientos de backend explícitos |
+| Solicitar enlace de acceso | No desde API; la UI solo intenta acceso de usuario ya invitado | Sí, para su propia cuenta invitada | Sí, para su propia cuenta invitada | No aplica |
+| Crear, reenviar o revocar invitaciones | No | No, 403 | Sí, solo mediante API de backend | Sí, únicamente después de la autorización API y auditoría |
+| Cambiar rol, organización o permisos propios | No | No | No | No directamente: solo flujo de backend revisado |
+| Escribir membresías, perfiles, invitaciones o auditoría mediante cliente | No | No | No | Sí, con validaciones de backend |
+| Leer membresías, invitaciones y auditoría | No | Solo su membresía | Solo la organización EAG | Solo operación controlada |
+
+## Aplicación técnica
+
+- FastAPI exige un bearer JWT validado con JWKS, firma `RS256`, expiración,
+  issuer y audience. Un token ausente, vencido, con firma o claims inválidos
+  devuelve 401; un token válido sin pertenencia o sin permiso devuelve 403.
+- El backend resuelve organización y rol después de verificar el token. No usa
+  claims de rol u organización enviados por navegador, URL o cuerpo de la
+  petición.
+- Los cuerpos de invitación rechazan campos adicionales: no aceptan `role` ni
+  `organization_id`. La organización deriva de la pertenencia del administrador.
+- La migración activa RLS y no define políticas de escritura para clientes
+  autenticados. Perfiles, membresías, invitaciones y auditoría se cambian por
+  backend; los controles de UI son solo una ayuda visual.
+- La tabla de auditoría prevista registra acciones de invitación y membresía,
+  actor, objetivo y organización. No debe incluir tokens, cabeceras
+  `Authorization`, claves ni correos en `metadata`.
+
+## Supabase y revocación: pendientes verificables
+
+La migración prepara RLS, pero no se aplicó contra una base real. Tampoco hay
+una instancia, SMTP, claves, usuarios o credenciales de prueba autorizadas.
+Los endpoints de invitación usan una pasarela local de prueba y responden 503
+cuando no exista un proveedor configurado; no envían correos reales.
+
+La validación JWT local comprueba firma y expiración, pero no consulta Supabase
+en cada solicitud para saber si una sesión se revocó. Por ello una revocación
+en el proveedor **no se declara inmediata** para un access token ya emitido:
+su alcance depende de su TTL, la política de refresh y el mecanismo de bloqueo
+que EAG/Supabase aprueben. Antes de producción se debe probar: eliminación de
+membresía, expiración/refresh, cierre global de sesión, revocación de una
+invitación y trazabilidad de auditoría.

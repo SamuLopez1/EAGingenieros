@@ -15,7 +15,7 @@ Repositorio en preparación: contiene el plan de implementación y el backlog, *
 
 Las instrucciones breves para los agentes están en [AGENTS.md](AGENTS.md). Los documentos internos, datos reales, credenciales y entregables académicos locales no forman parte del repositorio.
 
-## Estructura base local (MVP-03)
+## Estructura base local y acceso (MVP-03–04)
 
 Requisitos comprobados en esta base: Python 3.14 y Node.js 24. No requiere
 SECOP, Supabase, Redis, OpenAI, credenciales ni servicios de pago.
@@ -48,6 +48,28 @@ permite ningún origen. Para permitir una UI concreta, copiar
 `apps/api/.env.example`, definir `EAG_CORS_ALLOWED_ORIGINS` con orígenes
 explícitos y no añadir comodines. Consulte [ARQUITECTURA_BASE.md](docs/ARQUITECTURA_BASE.md)
 para el contrato y la generación futura del cliente TypeScript.
+
+### Acceso por invitación previsto
+
+La aplicación no habilita registro público. La UI muestra inicio por enlace de
+acceso y cierre de sesión, pero sin valores externos autorizados indica que
+Supabase está pendiente de configuración; no simula una cuenta real. Solo usa
+`VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY` en el navegador. Nunca
+añada una clave de servicio, token, correo real o secreto a `VITE_*` ni a Git.
+
+La API valida bearer JWT con JWKS, firma, expiración, issuer y audience antes
+de permitir `/auth/session`. Los endpoints de crear, reenviar y revocar
+invitaciones son exclusivamente administrativos; sin una pasarela Supabase
+configurada responden 503 y no envían correo. Consulte la
+[matriz de permisos](docs/MATRIZ_DE_PERMISOS.md) y la
+[configuración/limitaciones](docs/ARQUITECTURA_BASE.md#autenticación-roles-y-aislamiento-mvp-04).
+
+Para preparar un entorno autorizado, copie los `.env.example` sin cambiar los
+marcadores por secretos en el repositorio. EAG debe aplicar
+`supabase/migrations/20260904000000_auth_roles_rls.sql`, desactivar el registro
+público, configurar SMTP y URLs de redirección permitidas, y proporcionar
+credenciales de prueba mediante un canal seguro. No se ejecutó esta integración
+ni E2E real en esta entrega.
 
 Riesgo conocido: esta base no valida cobertura documental de SECOP. Mantiene el
 spike y su recomendación de carga manual complementaria, sin convertirlos en
