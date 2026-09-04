@@ -49,6 +49,9 @@ permite ningún origen. Para permitir una UI concreta, copiar
 explícitos y no añadir comodines. Consulte [ARQUITECTURA_BASE.md](docs/ARQUITECTURA_BASE.md)
 para el contrato y la generación futura del cliente TypeScript.
 
+El smoke inicia la API desde `apps/api`, por lo que carga el archivo local no
+versionado `apps/api/.env`, si existe, igual que al ejecutarla manualmente.
+
 Riesgo conocido: esta base no valida cobertura documental de SECOP. Mantiene el
 spike y su recomendación de carga manual complementaria, sin convertirlos en
 una integración productiva.

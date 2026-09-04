@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import os
 import subprocess
-import sys
 import time
 from pathlib import Path
 from urllib.request import urlopen
@@ -50,7 +49,7 @@ def main() -> int:
     try:
         api = subprocess.Popen(
             [api_python(), "-m", "uvicorn", "app.main:app", "--app-dir", str(API_DIR), "--host", "127.0.0.1", "--port", "8000"],
-            cwd=ROOT,
+            cwd=API_DIR,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             env=environment,
