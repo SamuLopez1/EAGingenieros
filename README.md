@@ -15,6 +15,49 @@ Repositorio en preparación: contiene el plan de implementación y el backlog, *
 
 Las instrucciones breves para los agentes están en [AGENTS.md](AGENTS.md). Los documentos internos, datos reales, credenciales y entregables académicos locales no forman parte del repositorio.
 
+## Estructura base local (MVP-03)
+
+Requisitos comprobados en esta base: Python 3.14 y Node.js 24. No requiere
+SECOP, Supabase, Redis, OpenAI, credenciales ni servicios de pago.
+
+```powershell
+# API (terminal 1)
+python -m venv apps/api/.venv
+Set-Location apps/api
+.\.venv\Scripts\python.exe -m pip install -r requirements.lock
+.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\python.exe -m mypy app
+.\.venv\Scripts\python.exe -m pytest
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
+
+# UI (terminal 2, desde la raíz del repositorio)
+npm ci --prefix apps/web
+npm run dev --prefix apps/web
+npm run lint --prefix apps/web
+npm run typecheck --prefix apps/web
+npm run test --prefix apps/web
+npm run build --prefix apps/web
+
+# Smoke local API -> proxy Vite -> UI
+python scripts/smoke_local.py
+```
+
+La API queda en `http://127.0.0.1:8000/health`; su OpenAPI está en
+`/openapi.json` y la documentación interactiva en `/docs`. Por defecto CORS no
+permite ningún origen. Para permitir una UI concreta, copiar
+`apps/api/.env.example`, definir `EAG_CORS_ALLOWED_ORIGINS` con orígenes
+explícitos y no añadir comodines. Consulte [ARQUITECTURA_BASE.md](docs/ARQUITECTURA_BASE.md)
+para el contrato y la generación futura del cliente TypeScript.
+
+Riesgo conocido: esta base no valida cobertura documental de SECOP. Mantiene el
+spike y su recomendación de carga manual complementaria, sin convertirlos en
+una integración productiva.
+
+En Windows, una carpeta sincronizada por OneDrive puede mantener bloqueado un
+binario nativo de Vite después de una ejecución interrumpida. Antes de repetir
+`npm ci`, asegúrese de cerrar los procesos locales de desarrollo; este riesgo no
+afecta los lockfiles ni autoriza omitir sus verificaciones.
+
 ## Spike técnico SECOP II (MVP-02)
 
 El spike aislado consulta únicamente los recursos públicos candidatos de SECOP II,
