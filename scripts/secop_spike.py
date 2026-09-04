@@ -252,7 +252,10 @@ def build_where(filters: Mapping[str, str], available_fields: set[str]) -> str |
     unknown = sorted(set(filters) - available_fields)
     if unknown:
         raise ValueError(f"campos de filtro inexistentes: {', '.join(unknown)}")
-    clauses = [f"{field} = '{value.replace("'", "''")}'" for field, value in sorted(filters.items())]
+    clauses: list[str] = []
+    for field, value in sorted(filters.items()):
+        escaped_value = value.replace("'", "''")
+        clauses.append(f"{field} = '{escaped_value}'")
     return " AND ".join(clauses)
 
 
