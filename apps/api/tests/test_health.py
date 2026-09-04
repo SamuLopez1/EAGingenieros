@@ -56,3 +56,13 @@ def test_cors_is_not_enabled_by_default() -> None:
     response = client.get("/health", headers={"Origin": "http://localhost:5173"})
 
     assert "access-control-allow-origin" not in response.headers
+
+
+def test_cors_origins_use_the_documented_comma_separated_environment_value(monkeypatch) -> None:
+    monkeypatch.setenv(
+        "EAG_CORS_ALLOWED_ORIGINS", "http://localhost:5173,https://app.example.invalid"
+    )
+
+    settings = Settings()
+
+    assert settings.cors_origins == ["http://localhost:5173", "https://app.example.invalid"]

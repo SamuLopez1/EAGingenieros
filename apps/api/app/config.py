@@ -13,7 +13,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Variables de entorno permitidas para la estructura inicial."""
 
-    model_config = SettingsConfigDict(env_prefix="EAG_", env_file=".env", extra="ignore")
+    # Los orígenes se documentan como una lista separada por comas. Desactivar
+    # el JSON implícito permite que el validador los normalice antes de tiparlos.
+    model_config = SettingsConfigDict(
+        env_prefix="EAG_", env_file=".env", extra="ignore", enable_decoding=False
+    )
 
     app_name: str = "EAG API"
     app_version: str = "0.1.0"
@@ -46,6 +50,9 @@ class Settings(BaseSettings):
 
         origins: list[str] = []
         for origin in self.cors_allowed_origins:
-            port = f":{origin.port}" if origin.port else ""
+            default_port = (origin.scheme == "http" and origin.port == 80) or (
+                origin.scheme == "https" and origin.port == 443
+            )
+            port = f":{origin.port}" if origin.port and not default_port else ""
             origins.append(f"{origin.scheme}://{origin.host}{port}")
         return origins
