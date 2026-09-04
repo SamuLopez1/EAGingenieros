@@ -72,7 +72,7 @@ de URL en la muestra tampoco demuestra ausencia en todo el dataset.
 
 **Fecha:** 2026-09-03.
 **Comando:** `python -m unittest discover -s tests -p "test_*.py"`
-**Resultado:** 10 pruebas ejecutadas, todas exitosas. No realizaron red.
+**Resultado:** 11 pruebas ejecutadas, todas exitosas. No realizaron red.
 
 Cubren respuestas sintéticas para:
 
