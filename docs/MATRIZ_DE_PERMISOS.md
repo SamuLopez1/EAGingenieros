@@ -39,10 +39,12 @@ representa un dato de negocio ni un usuario real.
 
 El 2026-09-06 se creó el proyecto dummy `eag-mvp-auth-dummy`, se aplicó la
 migración inicial y se comprobó que su JWKS público usa `ES256`. Se desactivó
-el registro público y se configuró la URL local autorizada. No hay datos de EAG,
- SMTP, claves locales, usuarios ni credenciales de prueba autorizadas. La segunda
- migración de RPCs se aplicó sin filas de resultado; la prueba E2E permanece
- pendiente.
+el registro público y se configuró la URL local autorizada. Una consulta de
+metadatos confirmó RLS habilitado y una política en cada una de las tablas
+`profiles`, `organization_memberships`, `invitations` y `audit_events`. No hay
+datos de EAG, SMTP, claves locales, usuarios ni credenciales de prueba
+autorizadas. La segunda migración de RPCs se aplicó sin filas de resultado; la
+prueba E2E permanece pendiente.
 
 La creación y revocación usan ahora una pasarela Supabase real cuando el backend
 recibe su clave de servicio local. El reenvío no se simula: la API devuelve 501
