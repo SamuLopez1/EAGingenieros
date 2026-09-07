@@ -32,10 +32,11 @@ function isSessionPayload(value: unknown): value is {
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-// Supabase redirige los enlaces de invitación y de acceso a esta UI. El
-// navegador debe consumir el callback para poder entregar el JWT a la API.
+// Este es un cliente de navegador: debe consumir el callback y conservar la
+// sesión tras la redirección para poder entregar el JWT a la API. No contiene
+// ni puede acceder a una clave de servicio.
 export const browserAuthClientOptions = {
-  auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: true },
+  auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: true },
 } as const;
 
 const unavailableAuthClient: AuthClient = {

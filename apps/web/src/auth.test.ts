@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 import { browserAuthClientOptions } from "./auth";
 
 describe("browserAuthClientOptions", () => {
-  it("consumes the invite or magic-link callback in the browser", () => {
+  it("consumes and retains the invite or magic-link callback in the browser", () => {
     expect(browserAuthClientOptions.auth).toEqual({
-      autoRefreshToken: false,
-      persistSession: false,
+      autoRefreshToken: true,
+      persistSession: true,
       detectSessionInUrl: true,
     });
   });
