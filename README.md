@@ -65,11 +65,13 @@ configurada responden 503 y no envían correo. Consulte la
 [configuración/limitaciones](docs/ARQUITECTURA_BASE.md#autenticación-roles-y-aislamiento-mvp-04).
 
 Para preparar un entorno autorizado, copie los `.env.example` sin cambiar los
-marcadores por secretos en el repositorio. EAG debe aplicar
-`supabase/migrations/20260904000000_auth_roles_rls.sql`, desactivar el registro
-público, configurar SMTP y URLs de redirección permitidas, y proporcionar
-credenciales de prueba mediante un canal seguro. No se ejecutó esta integración
-ni E2E real en esta entrega.
+marcadores por secretos en el repositorio. En el proyecto dummy de desarrollo
+se aplicaron `20260904000000_auth_roles_rls.sql` y
+`20260906000000_invitation_rpcs.sql`, se desactivó el registro público y se
+configuró `http://127.0.0.1:5173` como URL local permitida. Aún se deben
+configurar SMTP y valores locales seguros, asignar el primer administrador y
+realizar E2E con un correo de prueba autorizado. Nunca copie una clave de servicio a Git,
+`VITE_*`, OpenAPI o logs.
 
 Riesgo conocido: esta base no valida cobertura documental de SECOP. Mantiene el
 spike y su recomendación de carga manual complementaria, sin convertirlos en

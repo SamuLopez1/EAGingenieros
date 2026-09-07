@@ -83,7 +83,9 @@ class JwtValidator:
             claims = jwt.decode(
                 access_token,
                 signing_key,
-                algorithms=["RS256"],
+                # Los proyectos Supabase recientes pueden emitir RS256 o ES256.
+                # La lista cerrada impide aceptar `none`, HS256 u otros algoritmos.
+                algorithms=["RS256", "ES256"],
                 audience=self._settings.auth_audience,
                 issuer=self._settings.auth_issuer,
                 options={"require": ["exp", "iss", "aud", "sub"]},

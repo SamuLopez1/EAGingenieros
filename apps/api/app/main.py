@@ -26,8 +26,11 @@ from app.contracts import (
     SessionResponse,
 )
 from app.invitations import (
+    InvitationAuthorizationError,
     InvitationProviderUnavailable,
+    InvitationResendUnsupported,
     InvitationService,
+    SupabaseInvitationGateway,
     UnconfiguredInvitationGateway,
 )
 
@@ -69,9 +72,12 @@ def create_app(
     app.state.auth_services = auth_services or AuthServices(
         validator=JwtValidator(active_settings), memberships=memberships
     )
-    app.state.invitation_service = invitation_service or InvitationService(
-        gateway=UnconfiguredInvitationGateway()
+    invitations = (
+        SupabaseInvitationGateway(active_settings)
+        if active_settings.supabase_invites_are_configured
+        else UnconfiguredInvitationGateway()
     )
+    app.state.invitation_service = invitation_service or InvitationService(gateway=invitations)
 
     @app.get("/health", response_model=HealthResponse, tags=["system"])
     def health() -> HealthResponse:
@@ -139,10 +145,19 @@ def create_app(
         service: InvitationService = app.state.invitation_service
         try:
             service.resend(invitation_id=invitation_id, principal=principal)
+        except InvitationResendUnsupported:
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                detail="El proveedor no admite reenvío seguro de invitaciones.",
+            ) from None
         except InvitationProviderUnavailable:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="El proveedor de invitaciones no está configurado.",
+            ) from None
+        except InvitationAuthorizationError:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Permiso insuficiente."
             ) from None
         return InvitationResponse(invitation_id=invitation_id, status="resent")
 
@@ -162,6 +177,10 @@ def create_app(
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="El proveedor de invitaciones no está configurado.",
+            ) from None
+        except InvitationAuthorizationError:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Permiso insuficiente."
             ) from None
         return InvitationResponse(invitation_id=invitation_id, status="revoked")
 

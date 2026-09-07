@@ -35,17 +35,26 @@ representa un dato de negocio ni un usuario real.
   actor, objetivo y organización. No debe incluir tokens, cabeceras
   `Authorization`, claves ni correos en `metadata`.
 
-## Supabase y revocación: pendientes verificables
+## Supabase y revocación: comprobaciones y pendientes
 
-La migración prepara RLS, pero no se aplicó contra una base real. Tampoco hay
-una instancia, SMTP, claves, usuarios o credenciales de prueba autorizadas.
-Los endpoints de invitación usan una pasarela local de prueba y responden 503
-cuando no exista un proveedor configurado; no envían correos reales.
+El 2026-09-06 se creó el proyecto dummy `eag-mvp-auth-dummy`, se aplicó la
+migración inicial y se comprobó que su JWKS público usa `ES256`. Se desactivó
+el registro público y se configuró la URL local autorizada. No hay datos de EAG,
+ SMTP, claves locales, usuarios ni credenciales de prueba autorizadas. La segunda
+ migración de RPCs se aplicó sin filas de resultado; la prueba E2E permanece
+ pendiente.
+
+La creación y revocación usan ahora una pasarela Supabase real cuando el backend
+recibe su clave de servicio local. El reenvío no se simula: la API devuelve 501
+porque Supabase no documenta una operación de reenvío de invitaciones. Esta es
+una limitación que debe resolverse con EAG antes de cerrar la issue como completa.
 
 La validación JWT local comprueba firma y expiración, pero no consulta Supabase
 en cada solicitud para saber si una sesión se revocó. Por ello una revocación
 en el proveedor **no se declara inmediata** para un access token ya emitido:
 su alcance depende de su TTL, la política de refresh y el mecanismo de bloqueo
-que EAG/Supabase aprueben. Antes de producción se debe probar: eliminación de
-membresía, expiración/refresh, cierre global de sesión, revocación de una
-invitación y trazabilidad de auditoría.
+que EAG/Supabase aprueben. La revocación en esta API elimina primero la membresía,
+por lo que su resolución de sesión y RLS rechazan el acceso inmediatamente; un
+JWT ya emitido no queda criptográficamente inválido hasta su expiración. Antes
+de producción se debe probar: eliminación de membresía, expiración/refresh,
+cierre global de sesión, revocación de una invitación y trazabilidad de auditoría.

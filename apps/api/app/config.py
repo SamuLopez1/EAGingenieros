@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     supabase_url: AnyHttpUrl | None = None
     supabase_publishable_key: SecretStr | None = None
     supabase_service_role_key: SecretStr | None = None
+    supabase_invite_redirect_url: AnyHttpUrl | None = None
     auth_jwks_url: AnyHttpUrl | None = None
     auth_issuer: str | None = None
     auth_audience: str | None = None
@@ -77,7 +78,11 @@ class Settings(BaseSettings):
     def supabase_invites_are_configured(self) -> bool:
         """Las invitaciones requieren URL y clave privilegiada solo en backend."""
 
-        return bool(self.supabase_url and self.supabase_service_role_key)
+        return bool(
+            self.supabase_url
+            and self.supabase_service_role_key
+            and self.supabase_invite_redirect_url
+        )
 
     @property
     def supabase_memberships_are_configured(self) -> bool:

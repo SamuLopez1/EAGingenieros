@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import jwt
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from fastapi.testclient import TestClient
 
 from app.auth import AuthServices, JwtValidator, Membership, Role, SupabaseMembershipResolver
@@ -40,18 +40,18 @@ class FakeMemberships:
 class FakeInvitations:
     def __init__(self) -> None:
         self.created: list[tuple[str, UUID, UUID]] = []
-        self.resent: list[tuple[UUID, UUID]] = []
-        self.revoked: list[tuple[UUID, UUID]] = []
+        self.resent: list[tuple[UUID, UUID, UUID]] = []
+        self.revoked: list[tuple[UUID, UUID, UUID]] = []
 
     def create(self, *, email: str, organization_id: UUID, actor_id: UUID) -> UUID:
         self.created.append((email, organization_id, actor_id))
         return UUID("00000000-0000-0000-0000-000000000099")
 
-    def resend(self, *, invitation_id: UUID, actor_id: UUID) -> None:
-        self.resent.append((invitation_id, actor_id))
+    def resend(self, *, invitation_id: UUID, organization_id: UUID, actor_id: UUID) -> None:
+        self.resent.append((invitation_id, organization_id, actor_id))
 
-    def revoke(self, *, invitation_id: UUID, actor_id: UUID) -> None:
-        self.revoked.append((invitation_id, actor_id))
+    def revoke(self, *, invitation_id: UUID, organization_id: UUID, actor_id: UUID) -> None:
+        self.revoked.append((invitation_id, organization_id, actor_id))
 
 
 def make_settings() -> Settings:
@@ -84,12 +84,13 @@ def make_client(
 
 
 def make_token(
-    private_key: rsa.RSAPrivateKey,
+    private_key: rsa.RSAPrivateKey | ec.EllipticCurvePrivateKey,
     subject_id: UUID,
     *,
     expires_at: datetime | None = None,
     issuer: str = ISSUER,
     audience: str = AUDIENCE,
+    algorithm: str = "RS256",
 ) -> str:
     return jwt.encode(
         {
@@ -99,7 +100,7 @@ def make_token(
             "exp": expires_at or datetime.now(UTC) + timedelta(minutes=5),
         },
         private_key,
-        algorithm="RS256",
+        algorithm=algorithm,
     )
 
 
@@ -166,8 +167,28 @@ def test_admin_can_create_resend_and_revoke_invitation_only_through_backend() ->
     assert resent.json()["status"] == "resent"
     assert revoked.json()["status"] == "revoked"
     assert invitations.created == [("user@example.com", ORGANIZATION_ID, administrator_id)]
-    assert invitations.resent == [(invitation_id, administrator_id)]
-    assert invitations.revoked == [(invitation_id, administrator_id)]
+    assert invitations.resent == [(invitation_id, ORGANIZATION_ID, administrator_id)]
+    assert invitations.revoked == [(invitation_id, ORGANIZATION_ID, administrator_id)]
+
+
+def test_es256_token_from_a_recent_supabase_project_is_accepted() -> None:
+    signing_key = ec.generate_private_key(ec.SECP256R1())
+    subject_id = uuid4()
+    settings = make_settings()
+    auth_services = AuthServices(
+        validator=JwtValidator(
+            settings, signing_key_loader=FixedSigningKey(signing_key.public_key())
+        ),
+        memberships=FakeMemberships({subject_id: Membership(ORGANIZATION_ID, Role.ANALYST)}),
+    )
+    client = TestClient(create_app(settings, auth_services=auth_services))
+
+    response = client.get(
+        "/auth/session",
+        headers=bearer(make_token(signing_key, subject_id, algorithm="ES256")),
+    )
+
+    assert response.status_code == 200
 
 
 def test_analyst_cannot_create_invitation_or_escalate_a_role_from_payload() -> None:
