@@ -50,7 +50,9 @@ export function createBrowserAuthClient(): AuthClient {
   }
 
   const supabase = createClient(supabaseUrl, supabasePublishableKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
+    // Supabase redirige los enlaces de invitación y de acceso a esta UI. El
+    // navegador debe consumir el callback para poder entregar el JWT a la API.
+    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: true },
   });
 
   return {
