@@ -32,6 +32,12 @@ function isSessionPayload(value: unknown): value is {
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
+// Supabase redirige los enlaces de invitación y de acceso a esta UI. El
+// navegador debe consumir el callback para poder entregar el JWT a la API.
+export const browserAuthClientOptions = {
+  auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: true },
+} as const;
+
 const unavailableAuthClient: AuthClient = {
   async loadSession() {
     return { kind: "configuration-required" };
@@ -49,11 +55,7 @@ export function createBrowserAuthClient(): AuthClient {
     return unavailableAuthClient;
   }
 
-  const supabase = createClient(supabaseUrl, supabasePublishableKey, {
-    // Supabase redirige los enlaces de invitación y de acceso a esta UI. El
-    // navegador debe consumir el callback para poder entregar el JWT a la API.
-    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: true },
-  });
+  const supabase = createClient(supabaseUrl, supabasePublishableKey, browserAuthClientOptions);
 
   return {
     async loadSession() {

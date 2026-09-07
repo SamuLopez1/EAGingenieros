@@ -1,29 +1,13 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-const { createClient } = vi.hoisted(() => ({
-  createClient: vi.fn(() => ({
-    auth: {
-      getSession: vi.fn(),
-      signInWithOtp: vi.fn(),
-      signOut: vi.fn(),
-    },
-  })),
-}));
+import { browserAuthClientOptions } from "./auth";
 
-vi.mock("@supabase/supabase-js", () => ({ createClient }));
-
-import { createBrowserAuthClient } from "./auth";
-
-describe("createBrowserAuthClient", () => {
+describe("browserAuthClientOptions", () => {
   it("consumes the invite or magic-link callback in the browser", () => {
-    createBrowserAuthClient();
-
-    expect(createClient).toHaveBeenLastCalledWith(
-      expect.any(String),
-      expect.any(String),
-      expect.objectContaining({
-        auth: expect.objectContaining({ detectSessionInUrl: true, persistSession: false }),
-      }),
-    );
+    expect(browserAuthClientOptions.auth).toEqual({
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: true,
+    });
   });
 });
