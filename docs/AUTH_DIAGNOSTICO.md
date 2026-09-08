@@ -3,6 +3,50 @@
 Alcance: issue #4, rama `codex/mvp-04-auth-roles`, PR #19 hacia `dev`.
 No se considera resuelto el login real ni se cierran los criterios E2E.
 
+## Actualización: comprobación real del panel (2026-09-08)
+
+Se accedió al proyecto dummy desde la sesión existente del navegador, sin leer
+claves ni exportar registros personales. Site URL y única Redirect URL confirmadas:
+`http://127.0.0.1:5173`. Consulta agregada: un usuario Auth, un perfil y una
+membership de administrador de EAG; RLS habilitada en perfil y membership.
+
+Dos consultas transaccionales bajo `authenticated`, con el sujeto resuelto dentro
+de PostgreSQL y sin devolver su identidad, fallaron con SQLSTATE `42501`:
+`permission denied for table profiles` y
+`permission denied for table organization_memberships`. Esto demuestra que falta
+el permiso SQL SELECT, independientemente de la existencia de políticas RLS.
+El resolver actual convierte el 403 de PostgREST en denegación de acceso.
+
+La migración `20260908000000_auth_read_grants.sql` concede SELECT exclusivamente
+sobre esas dos tablas y organizations para `authenticated`. No concede escrituras
+ni acceso a anon, ni modifica RLS. Se aplicó desde el panel con autorización
+explícita del usuario: `Success. No rows returned`. La comprobación transaccional
+equivalente a `supabase/tests/auth_read_access.sql` pasó en PostgreSQL real:
+perfil, membership y organización propios accesibles; sujeto ajeno y anon sin
+acceso a filas protegidas; intento de cambio de membership sin acceso.
+La prueba `supabase/tests/auth_read_access.sql` permite repetir el acceso propio
+y la denegación a un sujeto sin pertenencia y a anon, sin modificar filas.
+Es una prueba de PostgreSQL/RLS; no sustituye el callback/JWT real del navegador.
+
+El JWKS público se consultó de forma acotada: accesible, una clave, algoritmo
+ES256 (sin registrar material de clave ni kid). Se iniciaron API y UI usando la
+configuración local con stdout/stderr suprimidos. La UI real mostró conexión
+correcta con la API y estado anónimo en el navegador conectado.
+Panel de proveedores confirmado: registro público desactivado, acceso anónimo
+desactivado y Email habilitado. No se cambiaron esos ajustes.
+Smoke con los procesos configurados: UI y health directa/proxy 200; sesión
+anónima directa/proxy 401. Se repitieron lint, typecheck, las 19 pruebas web,
+20 API, 11 spike y build: correctos, con los mismos dos avisos de deprecación.
+
+La revisión automática bloqueó un proceso propuesto para generar en memoria un
+magic link del único dummy: requería leer internamente clave de servicio y correo,
+contrario a la restricción inicial. Ese proceso no se ejecutó; se solicitó una
+excepción limitada. Hasta resolverla o abrir manualmente un enlace, no se declara
+probado el login real ni terminada la issue.
+
+Los apartados siguientes conservan la evidencia de la sesión anterior; esta
+actualización resuelve las dudas sobre Site URL y existencia de membership.
+
 ## Evidencia y arreglo mínimo
 
 - Estado inicial Git limpio. Issue #4 abierta; PR #19 abierto hacia `dev`.
