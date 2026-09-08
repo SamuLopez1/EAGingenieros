@@ -64,6 +64,10 @@ configurada responden 503 y no envían correo. Consulte la
 [matriz de permisos](docs/MATRIZ_DE_PERMISOS.md) y la
 [configuración/limitaciones](docs/ARQUITECTURA_BASE.md#autenticación-roles-y-aislamiento-mvp-04).
 
+Para fallos tras el enlace de acceso, consulte el
+[diagnóstico de callback, sesión, API y RLS](docs/AUTH_DIAGNOSTICO.md).
+Separa reproducciones offline de las comprobaciones pendientes con Supabase.
+
 Para preparar un entorno autorizado, copie los `.env.example` sin cambiar los
 marcadores por secretos en el repositorio. En el proyecto dummy de desarrollo
 se aplicaron `20260904000000_auth_roles_rls.sql` y

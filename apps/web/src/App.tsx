@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 
-import { browserAuthClient } from "./auth";
+import { browserAuthClient, SessionCheckError } from "./auth";
 import type { AuthClient, SessionState } from "./auth";
 import { fetchHealth } from "./health";
 
@@ -11,7 +11,7 @@ type ConnectionState =
   | { kind: "error" };
 
 const loadingState: ConnectionState = { kind: "loading" };
-type AuthViewState = { kind: "loading" } | { kind: "error" } | SessionState;
+type AuthViewState = { kind: "loading" } | { kind: "error"; message: string } | SessionState;
 const loadingAuthState: AuthViewState = { kind: "loading" };
 
 export function App({
@@ -40,20 +40,30 @@ export function App({
 
   useEffect(() => {
     let active = true;
-    authClient
-      .loadSession()
-      .then((session) => {
-        if (active) {
-          setAuth(session);
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setAuth({ kind: "error" });
-        }
-      });
+    let revision = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    function refresh() {
+      const current = ++revision;
+      clearTimeout(timer);
+      setAuth(loadingAuthState);
+      // Salir del callback de Supabase antes de invocar métodos de Auth.
+      timer = setTimeout(() => {
+        authClient.loadSession().then((session) => {
+          if (active && current === revision) setAuth(session);
+        }).catch((error: unknown) => {
+          if (active && current === revision) {
+            setAuth({ kind: "error", message: error instanceof SessionCheckError
+              ? error.message : "No fue posible comprobar la sesión." });
+          }
+        });
+      }, 0);
+    }
+    const unsubscribe = authClient.onSessionChange(refresh);
+    refresh();
     return () => {
       active = false;
+      clearTimeout(timer);
+      unsubscribe();
     };
   }, [authClient]);
 
@@ -87,7 +97,12 @@ export function App({
         {auth.kind === "configuration-required" ? (
           <p role="alert">El inicio de sesión está pendiente de configuración por EAG.</p>
         ) : null}
-        {auth.kind === "error" ? <p role="alert">No fue posible comprobar la sesión.</p> : null}
+        {auth.kind === "error" ? (
+          <div>
+            <p role="alert">{auth.message}</p>
+            <button type="button" onClick={signOut}>Cerrar sesión</button>
+          </div>
+        ) : null}
         {auth.kind === "anonymous" ? (
           <form onSubmit={submitLogin}>
             <label htmlFor="email">Correo invitado</label>

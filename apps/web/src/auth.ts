@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 
-const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "");
+const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/$/, "") || undefined;
 const sessionUrl = `${configuredBaseUrl ?? "/api"}/auth/session`;
 
 export type SessionState =
@@ -10,6 +10,7 @@ export type SessionState =
 
 export interface AuthClient {
   loadSession(): Promise<SessionState>;
+  onSessionChange(listener: () => void): () => void;
   requestSignIn(email: string): Promise<void>;
   signOut(): Promise<void>;
 }
@@ -40,6 +41,7 @@ export const browserAuthClientOptions = {
 } as const;
 
 const unavailableAuthClient: AuthClient = {
+  onSessionChange() { return () => {}; },
   async loadSession() {
     return { kind: "configuration-required" };
   },
@@ -59,6 +61,11 @@ export function createBrowserAuthClient(): AuthClient {
   const supabase = createClient(supabaseUrl, supabasePublishableKey, browserAuthClientOptions);
 
   return {
+    onSessionChange(listener) {
+      // El listener solo invalida la vista; las llamadas async se difieren en App.
+      const { data } = supabase.auth.onAuthStateChange(() => listener());
+      return () => data.subscription.unsubscribe();
+    },
     async loadSession() {
       const { data, error } = await supabase.auth.getSession();
       if (error) {
@@ -72,7 +79,7 @@ export function createBrowserAuthClient(): AuthClient {
         headers: { Accept: "application/json", Authorization: `Bearer ${data.session.access_token}` },
       });
       if (!response.ok) {
-        throw new Error("No fue posible comprobar los permisos de la sesión.");
+        throw new SessionCheckError(response.status);
       }
       const payload: unknown = await response.json();
       if (!isSessionPayload(payload)) {
@@ -100,6 +107,19 @@ export function createBrowserAuthClient(): AuthClient {
       }
     },
   };
+}
+
+export class SessionCheckError extends Error {
+  constructor(readonly status: number) {
+    // Solo mensajes locales: nunca propagar cuerpos o errores del proveedor.
+    super(status === 401
+      ? "La API rechazó la sesión (401). Solicita un nuevo enlace o contacta a un administrador."
+      : status === 403
+        ? "La API denegó el acceso (403). Contacta a un administrador para revisar tu pertenencia a EAG."
+        : status === 503
+          ? "La verificación de acceso no está disponible (503). Contacta a un administrador."
+          : "No fue posible comprobar la sesión.");
+  }
 }
 
 export const browserAuthClient = createBrowserAuthClient();
