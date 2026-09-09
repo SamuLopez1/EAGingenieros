@@ -1,126 +1,91 @@
-# Diagnóstico de autenticación MVP-04 (2026-09-07, America/Bogota)
+# Diagnóstico de autenticación MVP-04
 
 Alcance: issue #4, rama `codex/mvp-04-auth-roles`, PR #19 hacia `dev`.
-No se considera resuelto el login real ni se cierran los criterios E2E.
+No se considera probado el login real ni se cierran los criterios E2E.
 
-## Actualización: comprobación real del panel (2026-09-08)
+## Cambio a correo y contraseña (2026-09-08)
 
-Se accedió al proyecto dummy desde la sesión existente del navegador, sin leer
-claves ni exportar registros personales. Site URL y única Redirect URL confirmadas:
-`http://127.0.0.1:5173`. Consulta agregada: un usuario Auth, un perfil y una
-membership de administrador de EAG; RLS habilitada en perfil y membership.
+Hecho confirmado por el usuario: UI, API, proxy, JWT/JWKS y configuración local
+están operativos. Supabase rechaza la solicitud de magic link antes de enviarlo.
+No se conoce aquí un código de error adicional y no se inventa su causa.
+**El flujo passwordless no está integrado ni funcionando.** Se sustituye su
+solicitud en la UI para agilizar el entorno dummy; no es una validación de EAG.
 
-Dos consultas transaccionales bajo `authenticated`, con el sujeto resuelto dentro
-de PostgreSQL y sin devolver su identidad, fallaron con SQLSTATE `42501`:
-`permission denied for table profiles` y
-`permission denied for table organization_memberships`. Esto demuestra que falta
-el permiso SQL SELECT, independientemente de la existencia de políticas RLS.
-El resolver actual convierte el 403 de PostgREST en denegación de acceso.
+El login usa únicamente `supabase.auth.signInWithPassword({ email, password })`.
+No crea cuentas. La contraseña va solo al SDK de Supabase: el formulario la vacía
+al enviar, no la guarda en estado React ni en atributos HTML, y no la incorpora
+a errores o logs. El adaptador sanitiza errores devueltos y excepciones del SDK.
+Los mensajes no confirman existencia de correo, invitación o membership.
 
-La migración `20260908000000_auth_read_grants.sql` concede SELECT exclusivamente
-sobre esas dos tablas y organizations para `authenticated`. No concede escrituras
-ni acceso a anon, ni modifica RLS. Se aplicó desde el panel con autorización
-explícita del usuario: `Success. No rows returned`. La comprobación transaccional
-equivalente a `supabase/tests/auth_read_access.sql` pasó en PostgreSQL real:
-perfil, membership y organización propios accesibles; sujeto ajeno y anon sin
-acceso a filas protegidas; intento de cambio de membership sin acceso.
-La prueba `supabase/tests/auth_read_access.sql` permite repetir el acceso propio
-y la denegación a un sujeto sin pertenencia y a anon, sin modificar filas.
-Es una prueba de PostgreSQL/RLS; no sustituye el callback/JWT real del navegador.
+Se mantiene esta secuencia: sesión Supabase → evento de Auth → `getSession()` →
+JWT a `/auth/session` → rol de la API. El SDK no concede permisos de EAG por sí
+solo. Persistencia, refresh, suscripción, limpieza al desmontar y rechazo de
+respuestas tardías siguen activos. La detección del callback de invitación
+administrativa sigue cubierta; no se solicita magic link desde la UI.
 
-El JWKS público se consultó de forma acotada: accesible, una clave, algoritmo
-ES256 (sin registrar material de clave ni kid). Se iniciaron API y UI usando la
-configuración local con stdout/stderr suprimidos. La UI real mostró conexión
-correcta con la API y estado anónimo en el navegador conectado.
-Panel de proveedores confirmado: registro público desactivado, acceso anónimo
-desactivado y Email habilitado. No se cambiaron esos ajustes.
-Smoke con los procesos configurados: UI y health directa/proxy 200; sesión
-anónima directa/proxy 401. Se repitieron lint, typecheck, las 19 pruebas web,
-20 API, 11 spike y build: correctos, con los mismos dos avisos de deprecación.
+No se consultaron valores de `.env`, claves, JWT, cuentas ni datos de Supabase
+para implementar este cambio. No se crearon ni modificaron cuentas o contraseñas.
 
-La revisión automática bloqueó un proceso propuesto para generar en memoria un
-magic link del único dummy: requería leer internamente clave de servicio y correo,
-contrario a la restricción inicial. Ese proceso no se ejecutó; se solicitó una
-excepción limitada. Hasta resolverla o abrir manualmente un enlace, no se declara
-probado el login real ni terminada la issue.
+## Único paso manual previo al login real
 
-Los apartados siguientes conservan la evidencia de la sesión anterior; esta
-actualización resuelve las dudas sobre Site URL y existencia de membership.
+Un administrador autorizado debe provisionar el usuario dummy con contraseña,
+correo confirmado, perfil y membership de EAG con rol administrador o analista.
+Las credenciales se introducen únicamente en la UI local, nunca en Git, mensajes,
+capturas o logs. Después se debe probar, con autorización: login → rol devuelto
+por API → recarga con sesión persistida → logout. Hasta entonces, **login real
+con contraseña pendiente**; las pruebas descritas abajo son offline.
 
-## Evidencia y arreglo mínimo
+La recuperación de contraseña queda pendiente y no se implementa. Se conservan
+backend de invitaciones, revocación, auditoría, roles, RLS y migraciones. SMTP,
+reenvío de invitaciones (501), validación de revocación/refresh con el proveedor
+y revisión humana mantienen sus pendientes. No se fusiona el PR ni se cierra la
+issue; la aceptación de EAG no se presume.
 
-- Estado inicial Git limpio. Issue #4 abierta; PR #19 abierto hacia `dev`.
-  CI previo: trabajos `api` y `web` correctos.
-  La dependencia #3 sigue abierta en GitHub; su aceptación no se da por concluida.
-- `App` consultaba la sesión una sola vez. Una prueba offline falló porque un
-  evento posterior no provocaba una segunda consulta. Ahora escucha los cambios
-  de Auth, difiere la consulta fuera del callback y descarta respuestas anteriores
-  a un cambio de sesión. Cancela temporizador y suscripción al desmontar.
-- Con `VITE_API_BASE_URL` vacío se solicitaba `/auth/session` al servidor web:
-  reproducción offline con ruta esperada `/api/auth/session` y ruta obtenida
-  `/auth/session`. Ahora los valores vacíos usan el proxy local.
-- Los errores HTTP 401, 403 y 503 se distinguían únicamente en Network. La UI ahora
-  muestra mensajes locales por estado y permite cerrar la sesión desde el error.
-  No muestra cuerpos de respuesta, errores de Supabase, JWT ni datos personales.
-- En `@supabase/auth-js` instalado, `getSession()` espera `initializePromise`.
-  Pruebas con el SDK real, hash sintético y HTTP simulado verifican que invitación
-  y magic link se consumen antes de resolver la sesión y se guardan en storage.
-  No se reprodujo una carrera de inicialización del SDK. Son pruebas offline,
-  **no integración con Supabase**.
+## Evidencia histórica conservada
 
-## Flujo y comprobaciones externas pendientes
+- En la sesión del 2026-09-07, `App` solo consultaba una vez la sesión. Una prueba
+  offline reprodujo que un evento posterior no provocaba una nueva consulta.
+  Se añadió suscripción y protección ante respuestas tardías.
+- Un valor vacío de `VITE_API_BASE_URL` enviaba `/auth/session` al servidor web.
+  Se reprodujo offline y se corrigió el fallback a `/api/auth/session`.
+- El SDK instalado espera `initializePromise` dentro de `getSession()`. Las
+  pruebas sintéticas anteriores de hash no demostraron integración passwordless.
+  No se reprodujo una carrera de inicialización del SDK.
+- Las rutas locales no fueron accesibles en la primera sesión. Un smoke aislado
+  sí pasó; posteriormente se confirmó UI/health directa y proxy 200 y sesión
+  anónima directa/proxy 401 con los procesos configurados.
+- El 2026-09-08 se comprobó en el panel dummy: Site URL y única Redirect URL
+  `http://127.0.0.1:5173`; Email habilitado; registro público y acceso anónimo
+  desactivados. Consulta agregada: un usuario Auth, un perfil y una membership
+  de administrador de EAG; RLS habilitada. No se exportaron identidades.
+- Bajo el rol SQL `authenticated`, perfil y membership fallaron con SQLSTATE
+  `42501`, `permission denied for table profiles/organization_memberships`.
+  Faltaba SELECT, aunque existían políticas RLS. El resolver convierte la
+  denegación de PostgREST en 403.
+- Se aplicó con autorización `20260908000000_auth_read_grants.sql`: SELECT sobre
+  profiles, organization_memberships y organizations sujeto a RLS, sin escrituras
+  ni grants a anon. La comprobación equivalente a
+  `supabase/tests/auth_read_access.sql` pasó en PostgreSQL real: acceso propio
+  permitido, sujeto ajeno y anon sin filas protegidas, sin cambio de membership.
+  Esta evidencia SQL no sustituye un JWT real desde navegador.
+- JWKS público accesible, una clave ES256, sin registrar material de clave ni kid.
+- La revisión automática bloqueó un experimento de generación de magic link por
+  requerir acceso interno a clave/correo contra la restricción del usuario. No se
+  ejecutó. Ese experimento se abandona; no es un paso del nuevo login.
+- Antes de este cambio, CI API/web estaba verde en `7d35844`; Git estaba limpio.
+  La dependencia #3 seguía abierta, sin dar por concluida su aceptación.
 
-1. **Redirección:** la documentación previa registra Site URL y Redirect URL
-   `http://127.0.0.1:5173`. No se revalidó el panel Supabase en esta sesión.
-   Comprobar allí el origen y ruta exactos del callback y del redirect de invitación.
-   `localhost` y `127.0.0.1`, puertos y perfiles de navegador tienen almacenamiento
-   diferente aunque se use el mismo computador. No copiar el enlace completo.
-2. **Invitación / magic link:** el backend invita mediante `/auth/v1/invite` y
-   después ejecuta `record_eag_invitation` para perfil y membership de analista.
-   Invitar directamente desde el panel Auth no ejecuta esa RPC. La UI solicita
-   magic links para usuarios existentes con `shouldCreateUser: false`; esto no
-   asigna roles ni membership. Revisar si el dummy fue provisionado por el panel
-   o por el backend; su ausencia de membership es una hipótesis, no un hallazgo.
-3. **Callback / sesión:** el cliente actual usa el flujo implicit predeterminado,
-   con detección de URL, persistencia y refresh habilitados. No cambiar a PKCE
-   como solución genérica: el backend de invitaciones actual no inicia un
-   desafío PKCE ni guarda un verificador en el navegador del destinatario.
-   Si se recibe `code`, comprobar el flujo que lo generó y la presencia del
-   verificador en el mismo origen; el intercambio explícito corresponde a un
-   flujo PKCE configurado. No intercambiar dos veces un código ya consumido por
-   el SDK. Registrar solo: callback hash/code/ninguno, sesión sí/no y estado HTTP.
-4. **JWT / API:** el código valida firma ES256 o RS256, expiración, issuer,
-   audience y sub mediante JWKS. Las pruebas offline firman tokens sintéticos y
-   cubren firma, expiración, issuer y audience incorrectos, además de ES256.
-   Falta comprobar con el proceso dummy que issuer coincide exactamente con
-   `<Supabase URL>/auth/v1`, audience con `authenticated`, JWKS con
-   `<Supabase URL>/auth/v1/.well-known/jwks.json`, algoritmo permitido y reloj/exp
-   válidos. Hacer comparaciones booleanas dentro del proceso autorizado; nunca
-   exportar JWT, claves, claims personales o valores de `.env`.
-5. **Perfil / membership / RLS:** la API consulta `organization_memberships` usando
-   el JWT validado y la clave publicable; exige exactamente una pertenencia válida.
-   No deriva el rol del navegador. En SQL, la política permite leer la pertenencia
-   propia; la función de administrador usa `security definer` para evitar recursión.
-   No se ejecutó RLS real en esta sesión. Un 403 de `/auth/session` puede significar
-   membership ausente, respuesta inválida o 401/403 de PostgREST. El perfil no se
-   consulta en ese endpoint: su ausencia por sí sola no explica ese 403.
-   EAG debe confirmar, sin devolver identificadores: perfil presente, membership
-   única de EAG y rol administrador/analista; después comprobar que esa misma
-   consulta pasa bajo el JWT del usuario, no solo bajo service_role.
-6. **Red / CORS:** sin URL explícita, la UI usa el proxy `/api` de Vite hacia
-   `127.0.0.1:8000`. Para una API en otro origen, permitir explícitamente el origen
-   de la UI y Authorization en el preflight. El backend ya lo contempla y tiene
-   pruebas offline de CORS. No se inspeccionaron valores de `.env`.
+## Pruebas offline y comandos
 
-Las cinco rutas iniciales de UI, health y sesión (directa/proxy) no fueron
-accesibles desde las herramientas, incluso tras repetir fuera del sandbox.
-Se levantaron procesos temporales aislados sin configuración Supabase para el
-smoke; health respondió y sesión anónima dio 401 en API y proxy. Se terminaron
-solo esos procesos. Esto no verifica la sesión del navegador del usuario.
+Las pruebas usan únicamente placeholders no válidos, cuentas de ejemplo y mocks.
+Cubren credenciales correctas simuladas → sesión SDK → `/auth/session` → rol del
+servidor (ignorando el rol del cliente), errores genéricos, sesión ausente,
+401/403/503, logout, no registro público y ausencia de contraseña en peticiones
+a la API propia, logs, errores, HTML serializado, health y OpenAPI. No se guardan
+snapshots de credenciales. Se conservan las pruebas de JWT/firma/ES256, issuer,
+audience, expiración, roles, escalada, aislamiento, CORS y secretos.
 
-## Verificación reproducible sin leer `.env`
-
-Desde la raíz, las pruebas Python usan el cwd de la raíz y `PYTHONPATH=apps/api`:
+Desde la raíz, sin cargar el `.env` de `apps/api`:
 
 ```powershell
 $env:PYTHONPATH = 'apps/api'
@@ -132,11 +97,7 @@ npm run lint --prefix apps/web
 npm run typecheck --prefix apps/web
 ```
 
-Resultados: ruff y mypy correctos; API 20 pruebas; spike 11 pruebas. Dos avisos
-existentes de deprecación Starlette/httpx/anyio, sin fallos.
-
-Para que Vite/Vitest no carguen los `.env` locales, se creó un wrapper recreable
-ignorado (no cambia la configuración de desarrollo):
+Para impedir que Vite/Vitest carguen `.env`, usar un wrapper recreable e ignorado:
 
 ```powershell
 New-Item -ItemType Directory -Force apps/web/node_modules/.cache | Out-Null
@@ -145,36 +106,31 @@ npm run test --prefix apps/web -- --config node_modules/.cache/eag-verification.
 npm run build --prefix apps/web -- --config node_modules/.cache/eag-verification.config.ts
 ```
 
-Resultados finales web: lint, typecheck, 19 pruebas y build correctos.
-La revisión de los siete archivos del cambio y el escaneo de patrones no detectaron
-credenciales ni datos personales; las direcciones e identificadores de pruebas son
-sintéticos. `git diff --check` pasó. Solo `.env.example` aparece en los archivos
-versionados de configuración de entorno.
+El smoke de este cambio usa procesos temporales en puertos 18000/15173, API con
+cwd aislado y Vite con el wrapper sin `.env`. Comprueba health, OpenAPI, UI,
+proxy y 401 anónimo. No contacta Supabase ni consume sesiones existentes.
+Comando ejecutado: `python tmp/smoke_password_offline.py` (wrapper local ignorado).
+Resultado: correcto. La primera creación del wrapper falló porque no existía
+`tmp`; se creó esa carpeta y se repitió correctamente, sin leer `.env`.
 
-El smoke ejecutado fue `python tmp/offline_auth_smoke.py`, un wrapper local
-ignorado de `scripts/smoke_local.py` que añade ese `--config` al proceso Vite y
-verifica 401 en `/auth/session` y `/api/auth/session`. Resultado: correcto.
-Para repetir manualmente: iniciar uvicorn desde la raíz con
-`--app-dir apps/api` y Vite desde `apps/web` con ese `--config`; comprobar health,
-UI y ambos endpoints anónimos y cerrar los procesos temporales.
+Resultados finales: lint y typecheck web correctos; 22 pruebas web; ruff y mypy
+correctos; 21 pruebas API; 11 pruebas spike; build correcto; smoke aislado correcto.
+Persisten dos avisos de deprecación de Starlette/httpx/anyio, sin fallos.
+No se ejecutaron pruebas de red contra Supabase durante este cambio.
 
-## Limpieza conservadora
+## Conservación y limpieza
 
-`git ls-files` no encontró caches, dist, cobertura, node_modules ni entornos
-virtuales versionados. `git check-ignore` confirmó ambos `.env` locales ignorados.
-Lista de candidatos materiales a eliminar: **vacía**. No se borró ningún archivo
-ni fue necesario ampliar `.gitignore`. Los wrappers locales, dist y caches de las
-comprobaciones son recreables y ya están ignorados. Se conservaron el spike,
-pruebas, migraciones, documentación, lockfiles, CI y `.env.example`.
+No se eliminan archivos. Se sustituye el método de login y sus pruebas/textos,
+y se retira solo la variante magic-link de la prueba de callback, conservando la
+invitación administrativa. Se retiran instrucciones operativas de diagnóstico
+passwordless obsoletas, conservando arriba sus fallos y evidencia histórica.
+No se borran spike, pruebas de autorización, migraciones, lockfiles, CI,
+`.env.example`, `.gitignore` ni archivos de arquitectura. Los wrappers y salidas
+locales son recreables y ya están ignorados; no se leen ni borran `.env`.
 
-## Fuentes oficiales consultadas
+## Fuentes oficiales
 
-- [Inicialización del cliente](https://supabase.com/docs/reference/javascript/auth-initialize)
+- [signInWithPassword](https://supabase.com/docs/reference/javascript/auth-signinwithpassword)
 - [Eventos de autenticación](https://supabase.com/docs/reference/javascript/auth-onauthstatechange)
-- [Redirect URLs](https://supabase.com/docs/guides/auth/redirect-urls)
-- [Flujo implicit](https://supabase.com/docs/guides/auth/sessions/implicit-flow)
-- [Flujo PKCE](https://supabase.com/docs/guides/auth/sessions/pkce-flow)
-- [Invitación administrativa](https://supabase.com/docs/reference/javascript/auth-admin-inviteuserbyemail)
-
-Pendiente: ejecutar login, recarga, refresh/logout reales con la cuenta dummy,
-verificar membership/RLS y revisar humanamente el PR. No hay aprobación de EAG.
+- [Inicialización](https://supabase.com/docs/reference/javascript/auth-initialize)
+- [Invitaciones administrativas](https://supabase.com/docs/reference/javascript/auth-admin-inviteuserbyemail)

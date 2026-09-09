@@ -23,6 +23,18 @@ def test_openapi_publishes_the_health_contract() -> None:
     assert "/health" in response.json()["paths"]
 
 
+def test_public_contract_does_not_expose_or_accept_passwords() -> None:
+    # El login ocurre directamente con Supabase; la API propia solo recibe JWT.
+    client = TestClient(create_app(Settings(_env_file=None)))
+
+    health = client.get("/health")
+    contract = client.get("/openapi.json")
+
+    assert "password" not in health.text.lower()
+    assert "password" not in contract.text.lower()
+    assert "requestBody" not in contract.json()["paths"]["/auth/session"]["get"]
+
+
 def test_invalid_environment_is_rejected() -> None:
     try:
         Settings(environment="not-valid")  # type: ignore[arg-type]

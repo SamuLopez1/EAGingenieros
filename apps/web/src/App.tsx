@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
-import { browserAuthClient, SessionCheckError } from "./auth";
+import { browserAuthClient, SessionCheckError, signInErrorMessage } from "./auth";
 import type { AuthClient, SessionState } from "./auth";
 import { fetchHealth } from "./health";
 
@@ -24,6 +24,8 @@ export function App({
   const [connection, setConnection] = useState<ConnectionState>(loadingState);
   const [auth, setAuth] = useState<AuthViewState>(loadingAuthState);
   const [email, setEmail] = useState("");
+  const passwordInput = useRef<HTMLInputElement>(null);
+  const [signingIn, setSigningIn] = useState(false);
   const [loginMessage, setLoginMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -69,18 +71,25 @@ export function App({
 
   async function submitLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (signingIn) return;
     setLoginMessage(null);
+    const password = passwordInput.current?.value ?? "";
+    // Campo no controlado: no copiar la contraseña a estado, HTML o mensajes.
+    if (passwordInput.current) passwordInput.current.value = "";
+    setSigningIn(true);
     try {
-      await authClient.requestSignIn(email);
-      setLoginMessage("Si tu invitación está vigente, recibirás un enlace de acceso.");
+      await authClient.signIn(email, password);
     } catch {
-      setLoginMessage("No fue posible solicitar el acceso. Contacta a un administrador.");
+      setLoginMessage(signInErrorMessage);
+    } finally {
+      setSigningIn(false);
     }
   }
 
   async function signOut() {
     try {
       await authClient.signOut();
+      setLoginMessage(null);
       setAuth({ kind: "anonymous" });
     } catch {
       setLoginMessage("No fue posible cerrar la sesión. Inténtalo de nuevo.");
@@ -90,7 +99,7 @@ export function App({
   return (
     <main>
       <h1>EAG Ingenieros</h1>
-      <p>Acceso por invitación: sin registro público ni módulos de negocio.</p>
+      <p>Acceso para usuarios provisionados: sin registro público ni módulos de negocio.</p>
       <section aria-label="Sesión">
         <h2>Sesión</h2>
         {auth.kind === "loading" ? <p role="status">Comprobando sesión…</p> : null}
@@ -105,16 +114,26 @@ export function App({
         ) : null}
         {auth.kind === "anonymous" ? (
           <form onSubmit={submitLogin}>
-            <label htmlFor="email">Correo invitado</label>
+            <label htmlFor="email">Correo</label>
             <input
               id="email"
               type="email"
-              autoComplete="email"
+              autoComplete="username"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               required
             />
-            <button type="submit">Solicitar enlace de acceso</button>
+            <label htmlFor="password">Contraseña</label>
+            <input
+              ref={passwordInput}
+              id="password"
+              type="password"
+              autoComplete="current-password"
+              required
+            />
+            <button type="submit" disabled={signingIn}>
+              {signingIn ? "Iniciando sesión…" : "Iniciar sesión"}
+            </button>
           </form>
         ) : null}
         {auth.kind === "authenticated" ? (

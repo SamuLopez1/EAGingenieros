@@ -11,7 +11,7 @@ export type SessionState =
 export interface AuthClient {
   loadSession(): Promise<SessionState>;
   onSessionChange(listener: () => void): () => void;
-  requestSignIn(email: string): Promise<void>;
+  signIn(email: string, password: string): Promise<void>;
   signOut(): Promise<void>;
 }
 
@@ -45,7 +45,7 @@ const unavailableAuthClient: AuthClient = {
   async loadSession() {
     return { kind: "configuration-required" };
   },
-  async requestSignIn() {
+  async signIn() {
     throw new Error("La autenticación no está configurada.");
   },
   async signOut() {
@@ -91,13 +91,13 @@ export function createBrowserAuthClient(): AuthClient {
         role: payload.role,
       };
     },
-    async requestSignIn(email: string) {
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: { emailRedirectTo: window.location.origin, shouldCreateUser: false },
-      });
-      if (error) {
-        throw new Error("No fue posible solicitar el enlace de acceso.");
+    async signIn(email: string, password: string) {
+      try {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw new Error();
+      } catch {
+        // No propagar mensajes/cause del proveedor ni distinguir cuentas existentes.
+        throw new Error(signInErrorMessage);
       }
     },
     async signOut() {
@@ -112,14 +112,14 @@ export function createBrowserAuthClient(): AuthClient {
 export class SessionCheckError extends Error {
   constructor(readonly status: number) {
     // Solo mensajes locales: nunca propagar cuerpos o errores del proveedor.
-    super(status === 401
-      ? "La API rechazó la sesión (401). Solicita un nuevo enlace o contacta a un administrador."
-      : status === 403
-        ? "La API denegó el acceso (403). Contacta a un administrador para revisar tu pertenencia a EAG."
-        : status === 503
-          ? "La verificación de acceso no está disponible (503). Contacta a un administrador."
-          : "No fue posible comprobar la sesión.");
+    super(status === 401 || status === 403
+      ? "No fue posible autorizar el acceso. Contacta a un administrador."
+      : status === 503
+        ? "La verificación de acceso no está disponible. Inténtalo de nuevo más tarde."
+        : "No fue posible comprobar la sesión.");
   }
 }
+
+export const signInErrorMessage = "No fue posible iniciar sesión. Revisa tus credenciales e inténtalo de nuevo.";
 
 export const browserAuthClient = createBrowserAuthClient();

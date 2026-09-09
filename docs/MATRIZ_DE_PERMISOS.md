@@ -12,7 +12,7 @@ representa un dato de negocio ni un usuario real.
 | Consultar `/health` y OpenAPI | Sí | Sí | Sí | Sí |
 | Consultar la sesión y su pertenencia a EAG | No, 401 | Solo la propia | Solo la propia | Solo para operación controlada |
 | Consultar datos de otra organización | No | No, 403 | No, 403 | Solo en procedimientos de backend explícitos |
-| Solicitar enlace de acceso | No desde API; la UI solo intenta acceso de usuario ya invitado | Sí, para su propia cuenta invitada | Sí, para su propia cuenta invitada | No aplica |
+| Iniciar sesión con correo y contraseña | Solo ante Supabase, con cuenta previamente provisionada; sin registro público | Para su propia cuenta | Para su propia cuenta | No aplica |
 | Crear, reenviar o revocar invitaciones | No | No, 403 | Sí, solo mediante API de backend | Sí, únicamente después de la autorización API y auditoría |
 | Cambiar rol, organización o permisos propios | No | No | No | No directamente: solo flujo de backend revisado |
 | Escribir membresías, perfiles, invitaciones o auditoría mediante cliente | No | No | No | Sí, con validaciones de backend |
@@ -20,7 +20,7 @@ representa un dato de negocio ni un usuario real.
 
 ## Aplicación técnica
 
-- FastAPI exige un bearer JWT validado con JWKS, firma `RS256`, expiración,
+- FastAPI exige un bearer JWT validado con JWKS, firma `RS256` o `ES256`, expiración,
   issuer y audience. Un token ausente, vencido, con firma o claims inválidos
   devuelve 401; un token válido sin pertenencia o sin permiso devuelve 403.
 - El backend resuelve organización y rol después de verificar el token. No usa

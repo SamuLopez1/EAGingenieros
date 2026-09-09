@@ -49,33 +49,36 @@ permite ningún origen. Para permitir una UI concreta, copiar
 explícitos y no añadir comodines. Consulte [ARQUITECTURA_BASE.md](docs/ARQUITECTURA_BASE.md)
 para el contrato y la generación futura del cliente TypeScript.
 
-### Acceso por invitación previsto
+### Acceso con correo y contraseña (usuarios provisionados)
 
-La aplicación no habilita registro público. La UI muestra inicio por enlace de
-acceso y cierre de sesión, pero sin valores externos autorizados indica que
-Supabase está pendiente de configuración; no simula una cuenta real. Solo usa
-`VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY` en el navegador. Nunca
-añada una clave de servicio, token, correo real o secreto a `VITE_*` ni a Git.
+La UI permite iniciar sesión con correo y contraseña mediante
+`supabase.auth.signInWithPassword({ email, password })`, sin registro público.
+La contraseña se entrega únicamente al SDK de Supabase, se vacía del formulario
+al enviar y no se envía a la API propia ni se incorpora a logs o errores.
+La UI conserva persistencia, eventos de sesión y cierre de sesión; solo muestra
+acceso autenticado después de validar el JWT y los permisos en `/auth/session`.
 
-La API valida bearer JWT con JWKS, firma, expiración, issuer y audience antes
-de permitir `/auth/session`. Los endpoints de crear, reenviar y revocar
-invitaciones son exclusivamente administrativos; sin una pasarela Supabase
-configurada responden 503 y no envían correo. Consulte la
-[matriz de permisos](docs/MATRIZ_DE_PERMISOS.md) y la
-[configuración/limitaciones](docs/ARQUITECTURA_BASE.md#autenticación-roles-y-aislamiento-mvp-04).
+El navegador solo usa `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY`.
+Nunca añada claves de servicio, contraseñas, tokens ni datos personales a Git,
+`VITE_*`, OpenAPI o logs. Sin configuración, la UI informa el pendiente.
 
-Para fallos tras el enlace de acceso, consulte el
-[diagnóstico de callback, sesión, API y RLS](docs/AUTH_DIAGNOSTICO.md).
-Separa reproducciones offline de las comprobaciones pendientes con Supabase.
+**Login real pendiente:** un administrador autorizado debe provisionar el dummy
+con contraseña, correo confirmado, perfil y membership de EAG con rol
+administrador o analista; después probar el acceso con autorización. Esta tarea
+no crea usuarios ni cambia contraseñas o datos de Supabase. La recuperación de
+contraseña queda pendiente y no tiene interfaz en esta versión.
 
-Para preparar un entorno autorizado, copie los `.env.example` sin cambiar los
-marcadores por secretos en el repositorio. En el proyecto dummy de desarrollo
-se aplicaron `20260904000000_auth_roles_rls.sql` y
-`20260906000000_invitation_rpcs.sql`, se desactivó el registro público y se
-configuró `http://127.0.0.1:5173` como URL local permitida. Aún se deben
-configurar SMTP y valores locales seguros, asignar el primer administrador y
-realizar E2E con un correo de prueba autorizado. Nunca copie una clave de servicio a Git,
-`VITE_*`, OpenAPI o logs.
+Se conservan las invitaciones administrativas, revocación, auditoría, roles,
+RLS y todas las migraciones. El aprovisionamiento sigue siendo responsabilidad
+del backend o de un administrador autorizado. El reenvío de invitaciones mantiene
+la limitación documentada (501); SMTP y su validación siguen pendientes.
+
+El cambio agiliza el entorno dummy, sin constituir validación de EAG. Según la
+confirmación del usuario, Supabase rechaza la solicitud de magic link antes de
+enviarlo: **el flujo passwordless no está integrado ni funcionando**. Se retiró
+su solicitud de la UI. Consulte la [matriz de permisos](docs/MATRIZ_DE_PERMISOS.md),
+la [arquitectura](docs/ARQUITECTURA_BASE.md) y el
+[diagnóstico y comandos de verificación offline](docs/AUTH_DIAGNOSTICO.md).
 
 Riesgo conocido: esta base no valida cobertura documental de SECOP. Mantiene el
 spike y su recomendación de carga manual complementaria, sin convertirlos en

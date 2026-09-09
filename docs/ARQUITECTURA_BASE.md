@@ -60,17 +60,39 @@ para el proceso backend y nunca debe tener prefijo `VITE_`, aparecer en OpenAPI
 o registrarse. Sin configuración externa, la UI indica el pendiente y las rutas
 de invitación responden de forma explícita sin enviar correos.
 
-### Configuración externa pendiente
+### Login y configuración del dummy
 
-El proyecto dummy ya tiene registro público desactivado, proveedor Email
-habilitado, `http://127.0.0.1:5173` como Site URL y como Redirect URL, y la
- migración inicial y de RPCs aplicadas. Esto no equivale a una configuración
- aprobada por EAG. Falta asignar el primer administrador mediante un procedimiento
- controlado y configurar valores locales de prueba fuera de Git:
-URL de Supabase, clave publicable para resolver RLS, clave de servicio solo para
-operaciones administrativas, JWKS, issuer, audience y URL de redirección de
-invitaciones. También faltan SMTP autorizado y una prueba E2E con una dirección
-de correo de prueba autorizada.
+La UI usa exclusivamente `supabase.auth.signInWithPassword({ email, password })`
+para cuentas ya provisionadas. La contraseña no pasa por FastAPI: solo el JWT
+obtenido llega a `/auth/session`, que determina rol y organización. Se conserva
+`onAuthStateChange`, se difiere la consulta fuera de su callback y se ignoran
+respuestas de sesiones anteriores. Se conservan persistencia, refresh, cierre de
+sesión y detección del callback de las invitaciones administrativas.
+
+El formulario usa un campo `password` no controlado, lo vacía al enviar y no
+copia su contenido a estado persistente, atributos HTML, errores o logs. El
+adaptador sustituye tanto errores devueltos como excepciones del SDK por un
+mensaje genérico, sin confirmar existencia de correo, invitación o membership.
+La API no incorpora un endpoint que reciba credenciales.
+
+El usuario confirma que UI, API, proxy, JWT/JWKS y configuración local están
+operativos, y que Supabase rechaza el magic link antes de enviarlo. Se cambia el
+acceso para agilizar el dummy; no se declara passwordless integrado ni validación
+de EAG. No se consultaron `.env` ni datos de Supabase durante este cambio.
+
+En comprobaciones previas se confirmaron registro público y acceso anónimo
+desactivados, Email habilitado, y `http://127.0.0.1:5173` como Site/Redirect URL.
+También se aplicó `20260908000000_auth_read_grants.sql`: otorga SELECT en perfil,
+membership y organización a `authenticated`, sujeto a RLS. La prueba SQL real
+mostró acceso propio permitido y acceso ajeno/anónimo bloqueado.
+
+**Pendiente manual antes de probar login real:** un administrador autorizado debe
+provisionar el dummy con contraseña, correo confirmado, perfil y membership de
+EAG con rol administrador o analista. No se cambian cuentas, contraseñas ni datos
+en esta tarea. El login con contraseña, recarga y logout reales siguen pendientes
+hasta completar ese paso y probarlos con autorización. La recuperación de
+contraseña queda pendiente; no se añade registro, recuperación, OAuth ni MFA.
+SMTP y el flujo administrativo de invitaciones conservan sus pendientes propios.
 
 La creación de invitaciones reales usa `POST /auth/v1/invite` desde el backend
 con la clave de servicio y registra perfil, membresía de `analista`, invitación

@@ -4,9 +4,9 @@ import { browserAuthClientOptions } from "./auth";
 
 afterEach(() => { localStorage.clear(); window.history.replaceState(null, "", "/"); });
 
-it.each(["invite", "magiclink"])("SDK consumes a synthetic %s hash before getSession resolves (offline HTTP stub)", async (type) => {
+it("SDK consumes an administrative invite hash before getSession resolves (offline HTTP stub)", async () => {
   // Real SDK, synthetic callback and stubbed Auth HTTP; not a Supabase integration.
-  window.history.replaceState(null, "", `/#access_token=synthetic-access&refresh_token=synthetic-refresh&expires_in=3600&token_type=bearer&type=${type}`);
+  window.history.replaceState(null, "", "/#access_token=synthetic-access&refresh_token=synthetic-refresh&expires_in=3600&token_type=bearer&type=invite");
   let respond!: (value: Response) => void;
   const request = vi.fn(() => new Promise<Response>((resolve) => { respond = resolve; }));
   const client = createClient("https://example.supabase.co", "synthetic-public-key", {

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const sdk = vi.hoisted(() => ({
-  getSession: vi.fn(), onAuthStateChange: vi.fn(), signInWithOtp: vi.fn(), signOut: vi.fn(),
+  getSession: vi.fn(), onAuthStateChange: vi.fn(), signInWithPassword: vi.fn(), signOut: vi.fn(),
 }));
 vi.mock("@supabase/supabase-js", () => ({ createClient: () => ({ auth: sdk }) }));
 
@@ -65,11 +65,27 @@ describe("browser auth adapter (offline, mocked provider)", () => {
     expect(vi.mocked(fetch).mock.calls[0][0]).toBe("https://api.example.invalid/auth/session");
   });
 
-  it("requests an existing-user magic link, without public registration", async () => {
-    sdk.signInWithOtp.mockResolvedValue({ error: null });
-    await (await client()).requestSignIn("user@example.com");
-    expect(sdk.signInWithOtp).toHaveBeenCalledWith({ email: "user@example.com", options: {
-      shouldCreateUser: false, emailRedirectTo: window.location.origin,
-    } });
+  it("sends credentials only to Supabase and does not call our API during sign-in", async () => {
+    sdk.signInWithPassword.mockResolvedValue({ error: null });
+    await (await client()).signIn("user@example.com", "<INVALID_PASSWORD_PLACEHOLDER>");
+    expect(sdk.signInWithPassword).toHaveBeenCalledOnce();
+    const [credentials] = sdk.signInWithPassword.mock.calls[0];
+    expect(credentials.email === "user@example.com").toBe(true);
+    expect(credentials.password === "<INVALID_PASSWORD_PLACEHOLDER>").toBe(true);
+    expect(Object.keys(credentials).sort()).toEqual(["email", "password"]);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it.each(["returned", "thrown"])("sanitizes %s provider errors without retaining credentials", async (mode) => {
+    const providerError = new Error("private account detail <INVALID_PASSWORD_PLACEHOLDER>");
+    if (mode === "returned") sdk.signInWithPassword.mockResolvedValue({ error: providerError });
+    else sdk.signInWithPassword.mockRejectedValue(providerError);
+    const error = await (await client()).signIn("user@example.com", "<INVALID_PASSWORD_PLACEHOLDER>")
+      .catch((failure: unknown) => failure);
+    const { signInErrorMessage } = await import("./auth");
+    expect(error instanceof Error && error.message === signInErrorMessage).toBe(true);
+    expect(error instanceof Error && "cause" in error).toBe(false);
+    expect(String(error).includes("<INVALID_PASSWORD_PLACEHOLDER>")).toBe(false);
+    expect(fetch).not.toHaveBeenCalled();
   });
 });
