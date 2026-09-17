@@ -14,8 +14,13 @@ Lo que este servicio NO hace, deliberadamente:
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.db.models import SyncRun
 from app.db.repository import (
     OpportunityRepository,
     SyncOutcome,
@@ -52,11 +57,15 @@ class SyncService:
         repository: OpportunityRepository,
         tracker: SyncRunTracker | None = None,
         dataset: str = PROCESSES_DATASET,
+        session: Session | None = None,
     ) -> None:
         self._client = client
         self._repository = repository
         self._tracker = tracker
         self._dataset = dataset
+        # Solo se usa para consultar el historial de ejecuciones. La escritura
+        # de oportunidades pasa siempre por el repositorio.
+        self._session = session
 
     def _start_offset(self, request: SyncRequest) -> int:
         if not request.resume or self._tracker is None:
@@ -153,6 +162,14 @@ class SyncService:
             error_kind=kind,
             error_detail=detail,
         )
+
+    def recent_runs(self, *, limit: int = 20) -> Sequence[SyncRun]:
+        """Historial reciente de ejecuciones, del más nuevo al más antiguo."""
+
+        if self._session is None:
+            return []
+        statement = select(SyncRun).order_by(SyncRun.id.desc()).limit(limit)
+        return list(self._session.execute(statement).scalars().all())
 
     def empty_result(self) -> UpsertResult:
         """Resultado vacío, útil para respuestas sin cambios."""

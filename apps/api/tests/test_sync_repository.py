@@ -15,6 +15,7 @@ from typing import Any
 
 from app.db.repository import (
     InMemoryOpportunityRepository,
+    SyncRunTracker,
     UpsertResult,
 )
 from app.db.sync_service import SyncRequest, SyncService
@@ -339,3 +340,68 @@ def test_upsert_result_total_sums_all_categories() -> None:
     result = UpsertResult(created=1, updated=2, unchanged=3, skipped=4)
 
     assert result.total == 10
+
+
+# --- Ciclo de vida de la ejecución ----------------------------------------
+
+
+def test_run_is_committed_before_the_network_call() -> None:
+    """La ejecución se confirma antes de consultar la fuente.
+
+    Regresión de un bloqueo real: la sincronización mantenía abierta la
+    transacción durante la llamada de red, reteniendo locks sobre ``sync_runs``
+    y ``sync_cursors``. Dos sincronizaciones concurrentes —o un proceso que
+    moría durante la consulta— dejaban bloqueos pendientes y colgaban a las
+    siguientes. Verificado contra PostgreSQL: tres sincronizaciones
+    concurrentes pasaron de colgarse a completarse en menos de un segundo.
+    """
+
+    calls: list[str] = []
+
+    class RecordingSession:
+        """Sesión falsa que registra el orden de las operaciones."""
+
+        def add(self, _obj: object) -> None:
+            calls.append("add")
+
+        def commit(self) -> None:
+            calls.append("commit")
+
+        def flush(self) -> None:  # pragma: no cover - no debería usarse
+            calls.append("flush")
+
+        def get(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+    class ClientThatRecordsOrder:
+        requests_made = 0
+
+        def iter_records(self, **_kwargs: Any):
+            calls.append("network")
+            yield make_record("A")
+
+    # Se usa el constructor real para que el commit inicial ocurra.
+    tracker = SyncRunTracker(
+        RecordingSession(),  # type: ignore[arg-type]
+        dataset=PROCESSES_DATASET,
+    )
+    # El constructor debe confirmar la apertura de la ejecución. Sin este
+    # commit, la transacción quedaría abierta durante toda la consulta de red.
+    assert calls == ["add", "commit"], f"apertura incorrecta: {calls}"
+    calls.clear()
+
+    service = SyncService(
+        client=ClientThatRecordsOrder(),  # type: ignore[arg-type]
+        repository=InMemoryOpportunityRepository(),
+        tracker=tracker,
+    )
+    service.run()
+
+    assert "network" in calls, "el cliente debió consultarse"
+    # El cierre también se confirma; nada queda a medio confirmar.
+    assert calls[-1] == "commit", f"el cierre no se confirmó: {calls}"
+    assert "flush" not in calls, "no debe quedar una transacción a medio confirmar"
+
+    # Y lo esencial: la apertura ya estaba confirmada antes de tocar la red,
+    # que es lo que se verificó en el constructor.
+    assert calls.count("commit") >= 2

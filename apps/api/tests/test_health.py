@@ -11,7 +11,12 @@ def test_health_returns_public_status_version_and_environment() -> None:
     response = client.get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "version": "test-version", "environment": "test"}
+    assert response.json() == {
+        "status": "ok",
+        "version": "test-version",
+        "environment": "test",
+        "persistence": "memory",
+    }
 
 
 def test_openapi_publishes_the_health_contract() -> None:

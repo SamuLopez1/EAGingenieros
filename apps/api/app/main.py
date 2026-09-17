@@ -1,22 +1,93 @@
-"""Aplicación mínima para comprobar configuración y conectividad local."""
+"""Aplicación FastAPI del MVP.
+
+El cableado de dependencias ocurre aquí: según la configuración disponible, la
+aplicación usa una base de datos real o el repositorio en memoria. Nunca
+degrada en silencio —el modo memoria se declara en `/health`— para que nadie
+confunda una demostración con un entorno con persistencia.
+"""
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session, sessionmaker
 
+from app.api.routes import router as opportunities_router
 from app.config import Settings
 from app.contracts import HealthResponse
+from app.db.repository import (
+    InMemoryOpportunityRepository,
+    OpportunityRepository,
+    SqlOpportunityRepository,
+)
+from app.db.session import create_engine_from_url, create_session_factory, session_scope
+from app.db.sync_service import SyncService
+from app.secop.client import PROCESSES_DATASET, HttpxClient, SecopClient
+
+
+def build_persistence(
+    settings: Settings,
+) -> tuple[OpportunityRepository, sessionmaker[Session] | None, Callable[[], None]]:
+    """Devuelve el repositorio, la fábrica de sesiones y un cierre ordenado.
+
+    Sin base de datos configurada se usa el repositorio en memoria: permite
+    desarrollar y probar sin infraestructura. La memoria no persiste entre
+    reinicios, y eso se declara en el health check en lugar de disimularse.
+    """
+
+    if not settings.database_is_configured:
+        return InMemoryOpportunityRepository(), None, lambda: None
+
+    engine = create_engine_from_url(settings.require_database_url())
+    factory = create_session_factory(engine)
+
+    class SessionBoundRepository:
+        """Repositorio que abre una sesión por operación.
+
+        Mantener una sesión viva durante toda la vida de la aplicación
+        acumularía estado y dificultaría recuperarse de una conexión caída.
+        """
+
+        def _repo(self, session: Session) -> SqlOpportunityRepository:
+            return SqlOpportunityRepository(session)
+
+        def upsert_many(self, records):  # type: ignore[no-untyped-def]
+            with session_scope(factory) as session:
+                return self._repo(session).upsert_many(records)
+
+        def count(self) -> int:
+            with session_scope(factory) as session:
+                return self._repo(session).count()
+
+        def get_by_source(self, dataset: str, source_id: str):  # type: ignore[no-untyped-def]
+            with session_scope(factory) as session:
+                return self._repo(session).get_by_source(dataset, source_id)
+
+        def get_by_id(self, opportunity_id: int):  # type: ignore[no-untyped-def]
+            with session_scope(factory) as session:
+                return self._repo(session).get_by_id(opportunity_id)
+
+        def list_recent(self, *, limit: int, offset: int):  # type: ignore[no-untyped-def]
+            with session_scope(factory) as session:
+                return self._repo(session).list_recent(limit=limit, offset=offset)
+
+    return SessionBoundRepository(), factory, engine.dispose
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
-    """Construye una API sin dependencias externas ni estado compartido."""
+    """Construye la aplicación con su persistencia y su cliente de SECOP."""
 
     active_settings = settings or Settings()
     app = FastAPI(
         title=active_settings.app_name,
         version=active_settings.app_version,
-        description="Contrato inicial de EAG. No incluye módulos de negocio.",
+        description=(
+            "API del MVP de preevaluación de licitaciones. "
+            "Las rutas de negocio aún no están protegidas por autenticación."
+        ),
     )
 
     if active_settings.cors_origins:
@@ -24,9 +95,49 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             CORSMiddleware,
             allow_origins=active_settings.cors_origins,
             allow_credentials=False,
-            allow_methods=["GET"],
+            allow_methods=["GET", "POST"],
             allow_headers=["Accept", "Content-Type"],
         )
+
+    repository, session_factory, dispose = build_persistence(active_settings)
+    app.state.opportunity_repository = repository
+    app.state.persistence_mode = "database" if session_factory else "memory"
+    app.state.dispose_persistence = dispose
+
+    def make_sync_service() -> SyncService:
+        """Crea un servicio de sincronización con recursos propios.
+
+        El cliente HTTP se abre por ejecución y se cierra al terminar, para no
+        mantener conexiones abiertas entre sincronizaciones.
+        """
+
+        token = (
+            active_settings.socrata_app_token.get_secret_value()
+            if active_settings.socrata_app_token
+            else None
+        )
+        http = HttpxClient(app_token=token)
+        client = SecopClient(
+            http=http,
+            page_size=active_settings.secop_page_size,
+            timeout=active_settings.secop_timeout_seconds,
+            max_retries=active_settings.secop_max_retries,
+            max_requests=active_settings.secop_max_requests,
+        )
+        session = session_factory() if session_factory else None
+        tracker = None
+        if session is not None:
+            from app.db.repository import SyncRunTracker
+
+            tracker = SyncRunTracker(session, dataset=PROCESSES_DATASET, trigger="manual")
+        return SyncService(
+            client=client,
+            repository=repository,
+            tracker=tracker,
+            session=session,
+        )
+
+    app.state.sync_service_factory = make_sync_service
 
     @app.get("/health", response_model=HealthResponse, tags=["system"])
     def health() -> HealthResponse:
@@ -34,7 +145,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             status="ok",
             version=active_settings.app_version,
             environment=active_settings.environment,
+            persistence=app.state.persistence_mode,
         )
+
+    app.include_router(opportunities_router)
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        """Libera el motor de base de datos al apagar la aplicación."""
+
+        try:
+            yield
+        finally:
+            app.state.dispose_persistence()
+
+    # El lifespan se registra después de construir las rutas para que el
+    # cableado ya exista cuando la aplicación empiece a servir.
+    app.router.lifespan_context = lifespan
 
     return app
 

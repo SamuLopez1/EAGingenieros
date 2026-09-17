@@ -90,6 +90,8 @@ class OpportunityRepository(Protocol):
 
     def get_by_source(self, dataset: str, source_id: str) -> Opportunity | None: ...
 
+    def get_by_id(self, opportunity_id: int) -> Opportunity | None: ...
+
     def list_recent(self, *, limit: int, offset: int) -> Sequence[Opportunity]: ...
 
 
@@ -150,6 +152,9 @@ class SqlOpportunityRepository:
                 Opportunity.source_id == source_id,
             )
         ).scalar_one_or_none()
+
+    def get_by_id(self, opportunity_id: int) -> Opportunity | None:
+        return self._session.get(Opportunity, opportunity_id)
 
     def list_recent(self, *, limit: int, offset: int) -> Sequence[Opportunity]:
         """Lista oportunidades de la más reciente a la más antigua.
@@ -223,6 +228,12 @@ class InMemoryOpportunityRepository:
     def get_by_source(self, dataset: str, source_id: str) -> Opportunity | None:
         return self._items.get((dataset, source_id))
 
+    def get_by_id(self, opportunity_id: int) -> Opportunity | None:
+        for item in self._items.values():
+            if item.id == opportunity_id:
+                return item
+        return None
+
     def list_recent(self, *, limit: int, offset: int) -> Sequence[Opportunity]:
         """Lista oportunidades de la más reciente a la más antigua.
 
@@ -281,7 +292,19 @@ class SyncRunTracker:
             started_at=datetime.now(UTC),
         )
         session.add(row)
-        session.flush()
+        # La fila se confirma de inmediato, no solo se hace flush.
+        #
+        # Motivo verificado: la sincronización consulta SECOP por red entre la
+        # apertura y el cierre de la ejecución. Si la transacción quedara
+        # abierta durante esa espera, retendría locks sobre ``sync_runs`` y
+        # ``sync_cursors``. Una segunda sincronización concurrente —o un
+        # proceso que muere durante la llamada de red— dejaría bloqueos
+        # pendientes y colgaría a las siguientes.
+        #
+        # Confirmar aquí hace que una ejecución interrumpida quede registrada
+        # como ``running`` y sea visible, en lugar de desaparecer con la
+        # transacción revertida.
+        session.commit()
         self._run = row
 
     @property
@@ -297,7 +320,7 @@ class SyncRunTracker:
         self._run.records_skipped = result.skipped
         self._run.requests_made = requests_made
         self._run.last_offset = last_offset
-        self._session.flush()
+        self._session.commit()
         return SyncOutcome(
             run_id=self.run_id,
             outcome="completed",
@@ -317,7 +340,7 @@ class SyncRunTracker:
         # consultada y no debe crecer sin límite en la base de datos.
         self._run.error_kind = error_kind[:64]
         self._run.error_detail = error_detail[:500]
-        self._session.flush()
+        self._session.commit()
         return SyncOutcome(
             run_id=self.run_id,
             outcome="failed",
@@ -332,11 +355,13 @@ class SyncRunTracker:
         if found is None:
             found = SyncCursor(dataset=self._dataset, last_offset=0)
             self._session.add(found)
-            self._session.flush()
+            # Sin confirmar aquí, dos ejecuciones concurrentes intentarían
+            # insertar la misma clave primaria y una fallaría.
+            self._session.commit()
         return found
 
     def advance_cursor(self, offset: int) -> None:
         cursor = self.cursor()
         cursor.last_offset = offset
         cursor.last_run_id = self.run_id
-        self._session.flush()
+        self._session.commit()
