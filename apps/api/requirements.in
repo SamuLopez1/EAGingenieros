@@ -3,6 +3,9 @@ pydantic
 pydantic-settings
 uvicorn
 httpx
+sqlalchemy
+psycopg[binary]
+alembic
 pytest
 ruff
 mypy
