@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EAG Licitaciones · Referencia visual del sistema de diseño</title>
+<style>
+:root{
+  --primary:#533afd; --primary-deep:#4434d4; --primary-press:#2e2b8c;
+  --primary-soft:#665efd; --primary-subdued:#b9b9f9; --brand-dark:#1c1e54;
+  --ink:#0d253d; --ink-2:#273951; --mute:#64748d; --mute-2:#61718a;
+  --canvas:#ffffff; --canvas-soft:#f6f9fc; --cream:#f5e9d4;
+  --hairline:#e3e8ee; --hairline-input:#a8c3de;
+  --ruby:#ea2261; --lemon:#9b6829;
+  --state-met:#0a6640; --state-partial:#8a5a1f; --state-unmet:#a82f22;
+  --state-review:#55647c; --state-info:#273951; --state-conflict:#ea2261;
+  --table-header:#f6f9fc; --table-row-hover:#f6f9fc; --table-rule:#e3e8ee;
+  --sans:'Inter','SF Pro Display',system-ui,-apple-system,sans-serif;
+  --serif:'Source Serif 4',Georgia,'Times New Roman',serif;
+  --mono:'JetBrains Mono','SF Mono',ui-monospace,monospace;
+  --shadow-1:rgba(0,55,112,.08) 0 1px 3px;
+  --shadow-2:rgba(0,55,112,.08) 0 8px 24px,rgba(0,55,112,.04) 0 2px 6px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--canvas);color:var(--ink);font-family:var(--sans);
+  font-weight:300;font-feature-settings:'ss01';font-size:15px;line-height:1.5;
+  -webkit-font-smoothing:antialiased}
+.wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+h1,h2,h3{font-weight:300;letter-spacing:-.02em;margin:0}
+h1{font-size:38px;letter-spacing:-.9px;line-height:1.1}
+h2{font-size:24px;letter-spacing:-.4px;margin:0 0 4px}
+h3{font-size:17px;letter-spacing:-.2px;margin:0 0 10px}
+a{color:var(--primary);text-decoration:none}
+a:hover{text-decoration:underline}
+code,.mono{font-family:var(--mono);font-size:12px}
+.tnum{font-variant-numeric:tabular-nums;font-feature-settings:'tnum'}
+
+header.top{border-bottom:1px solid var(--hairline);background:var(--canvas)}
+.top-in{display:flex;align-items:center;justify-content:space-between;
+  height:56px;gap:16px}
+.brand{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:500;
+  letter-spacing:-.2px;color:var(--ink)}
+.brand .mark{width:20px;height:20px;border-radius:5px;background:var(--primary)}
+.top-nav{display:flex;gap:20px;font-size:13.5px;color:var(--mute)}
+.top-nav a{color:var(--mute)}
+.top-nav a[aria-current]{color:var(--ink);font-weight:400}
+
+.hero{padding:52px 0 40px;border-bottom:1px solid var(--hairline)}
+.hero p.lead{font-size:17px;color:var(--ink-2);max-width:70ch;margin:14px 0 0;line-height:1.6}
+.eyebrow{font-size:10px;font-weight:500;letter-spacing:1.4px;text-transform:uppercase;
+  color:var(--primary);margin-bottom:12px}
+
+section{padding:44px 0;border-bottom:1px solid var(--hairline)}
+section:last-of-type{border-bottom:0}
+.sec-sub{color:var(--mute);font-size:13.5px;margin:0 0 24px;max-width:76ch;line-height:1.6}
+
+.grid{display:grid;gap:22px}
+.g2{grid-template-columns:repeat(2,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+@media(max-width:860px){.g2,.g3,.g4{grid-template-columns:1fr}}
+
+.card{border:1px solid var(--hairline);border-radius:12px;padding:18px;
+  background:var(--canvas);box-shadow:var(--shadow-1)}
+.card .lbl{font-size:10px;font-weight:500;letter-spacing:1.2px;
+  text-transform:uppercase;color:var(--mute);margin-bottom:12px}
+
+/* --- Estados de comparacion --- */
+.chips{display:flex;flex-wrap:wrap;gap:10px}
+.chip{display:inline-flex;align-items:center;gap:7px;border-radius:9999px;
+  padding:4px 12px;font-size:12px;font-weight:500;font-variant-numeric:tabular-nums}
+.chip::before{content:'';width:7px;height:7px;border-radius:50%;background:currentColor}
+.chip.met{color:var(--state-met);background:rgba(10,102,64,.12);
+  border:1px solid rgba(10,102,64,.30)}
+.chip.partial{color:var(--state-partial);background:rgba(138,90,31,.12);
+  border:1px solid rgba(138,90,31,.30)}
+.chip.unmet{color:var(--state-unmet);background:rgba(168,47,34,.12);
+  border:1px solid rgba(168,47,34,.30)}
+.chip.review{color:var(--state-review);background:rgba(85,100,124,.12);
+  border:1px solid rgba(85,100,124,.30)}
+
+.swatch{border:1px solid var(--hairline);border-radius:10px;overflow:hidden}
+.swatch .fill{height:58px}
+.swatch .meta{padding:9px 11px;font-size:11.5px;line-height:1.45}
+.swatch .meta b{display:block;font-weight:500;font-size:12px}
+.swatch .meta span{color:var(--mute);font-family:var(--mono);font-size:11px}
+
+/* --- Tabla densa --- */
+.tbl-wrap{border:1px solid var(--hairline);border-radius:12px;overflow:hidden;
+  box-shadow:var(--shadow-1)}
+table.dense{width:100%;border-collapse:collapse;font-size:13.5px}
+table.dense thead th{background:var(--table-header);color:var(--mute);
+  font-size:11px;font-weight:500;letter-spacing:.5px;text-transform:uppercase;
+  text-align:left;padding:9px 16px;border-bottom:1px solid var(--table-rule);
+  white-space:nowrap}
+table.dense td{padding:10px 16px;border-bottom:1px solid var(--table-rule);
+  vertical-align:middle}
+table.dense tbody tr:last-child td{border-bottom:0}
+table.dense tbody tr:hover{background:var(--table-row-hover)}
+table.dense tbody tr.sel{background:var(--table-row-hover);
+  box-shadow:inset 2px 0 0 var(--primary)}
+.t-entity{font-weight:400;color:var(--ink)}
+.t-title{color:var(--mute);font-size:12.5px;margin-top:2px}
+.unknown{color:var(--mute)}
+.locator{font-family:var(--mono);font-size:11.5px;color:var(--mute);
+  background:var(--canvas-soft);border-radius:4px;padding:1px 6px;
+  border:1px solid var(--hairline);white-space:nowrap}
+
+/* --- Evidencia: tres niveles --- */
+.ev{border:1px solid var(--hairline);border-radius:12px;padding:16px}
+.ev-quote{background:var(--canvas-soft);border-left:2px solid var(--hairline-input);
+  border-radius:0 8px 8px 0;padding:12px 15px;font-family:var(--serif);font-size:14.5px;
+  line-height:1.6;color:var(--ink)}
+.ev-quote .src{display:block;margin-top:9px;font-family:var(--sans);font-size:11.5px;
+  color:var(--mute)}
+.ev-interp{margin-top:14px;padding-left:0;color:var(--ink-2);font-size:13.5px}
+.ev-interp .cat{display:inline-block;font-size:10px;font-weight:500;letter-spacing:.7px;
+  text-transform:uppercase;color:var(--mute);margin-bottom:5px}
+.ev-human{margin-top:14px;padding:12px 15px;background:#fff;border-left:2px solid var(--primary);
+  border-radius:0 8px 8px 0;font-size:13.5px;color:var(--ink)}
+.ev-human .who{display:block;margin-top:7px;font-size:11.5px;color:var(--mute);
+  font-variant-numeric:tabular-nums}
+
+/* --- Confianza --- */
+.conf{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--mute)}
+.bars{display:flex;gap:2px}
+.bars i{width:4px;height:13px;border-radius:1px;background:var(--hairline)}
+.bars i.on{background:var(--mute)}
+.bars i.half{background:linear-gradient(90deg,var(--mute) 50%,var(--hairline) 50%)}
+
+/* --- Aprobacion --- */
+.banner{border-radius:10px;padding:13px 16px;font-size:13.5px;display:flex;
+  gap:11px;align-items:flex-start}
+.banner .ic{flex:none;width:17px;height:17px;margin-top:1px}
+.banner.pending{background:var(--cream);color:var(--ink)}
+.banner.approved{background:rgba(15,123,79,.08);border:1px solid rgba(10,102,64,.30);
+  color:var(--ink)}
+.banner.stale{background:rgba(155,104,41,.08);border:1px solid rgba(138,90,31,.30);
+  color:var(--ink)}
+.banner b{font-weight:500}
+.banner .ts{color:var(--mute);font-size:12px;font-variant-numeric:tabular-nums}
+
+/* --- Readiness --- */
+.ready{display:flex;flex-direction:column;gap:9px}
+.ready .it{display:flex;align-items:center;gap:10px;font-size:13.5px}
+.ready .dot{width:8px;height:8px;border-radius:50%;flex:none}
+.ready .ok{background:var(--state-met)}
+.ready .miss{background:var(--hairline);border:1px solid var(--mute)}
+.ready .bad{background:var(--state-partial)}
+.ready .tag{margin-left:auto;font-size:11.5px;color:var(--mute);
+  font-variant-numeric:tabular-nums}
+
+/* --- Botones y formularios --- */
+.btn{display:inline-flex;align-items:center;gap:7px;border-radius:9999px;
+  padding:8px 17px;font-size:13.5px;font-weight:400;font-family:var(--sans);
+  border:1px solid transparent;cursor:pointer;line-height:1}
+.btn-p{background:var(--primary);color:#fff}
+.btn-p:hover{background:var(--primary-deep)}
+.btn-p:active{background:var(--primary-press)}
+.btn-s{background:#fff;color:var(--ink);border-color:var(--hairline)}
+.btn-s:hover{background:var(--canvas-soft)}
+.btn-q{background:transparent;color:var(--primary);padding:8px 4px}
+label.f{display:block;font-size:11.5px;font-weight:500;color:var(--ink-2);
+  margin-bottom:5px;letter-spacing:.2px}
+input.i,select.i{width:100%;border:1px solid var(--hairline-input);border-radius:4px;
+  padding:8px 11px;font-family:var(--sans);font-size:13.5px;color:var(--ink);
+  background:#fff;font-weight:300}
+input.i:focus,select.i:focus{outline:2px solid rgba(83,58,253,.35);outline-offset:0;
+  border-color:var(--primary)}
+.hint{font-size:11.5px;color:var(--mute);margin-top:5px}
+
+.rule{border:0;border-top:1px solid var(--hairline);margin:22px 0}
+.note{background:var(--canvas-soft);border:1px solid var(--hairline);border-left:3px solid var(--primary);
+  border-radius:0 10px 10px 0;padding:13px 16px;font-size:13.5px;color:var(--ink-2);
+  line-height:1.6}
+.note b{color:var(--ink);font-weight:500}
+.dont{border-left-color:var(--state-unmet)}
+.dont b{color:var(--state-unmet)}
+footer{padding:34px 0 44px;color:var(--mute);font-size:12px}
+.type-row{display:flex;align-items:baseline;gap:16px;padding:11px 0;
+  border-bottom:1px solid var(--hairline)}
+.type-row .nm{width:150px;flex:none;font-family:var(--mono);font-size:11px;color:var(--mute)}
+.type-row .sp{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--mute)}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap top-in">
+    <div class="brand"><span class="mark"></span>EAG · Licitaciones</div>
+    <nav class="top-nav">
+      <a href="#estados" aria-current="page">Estados</a>
+      <a href="#tabla">Tabla</a>
+      <a href="#evidencia">Evidencia</a>
+      <a href="#revision">Revisión</a>
+      <a href="#tipografia">Tipografía</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap hero">
+  <div class="eyebrow">Sistema de diseño · Referencia visual</div>
+  <h1>Preevaluación de licitaciones</h1>
+  <p class="lead">Base <b>Stripi</b> (Stripe) de <span class="mono">VoltAgent/awesome-design-md</span>,
+  extendida con paleta semántica de estados, tabla densa y visualización de evidencia.
+  El resultado central de este producto es un <b>veredicto sobre un requisito</b>: por eso el
+  color de acción es único y los colores de significado están reservados.</p>
+</div>
+
+<div class="wrap">
+
+<section id="estados">
+  <h2>Estados de comparación</h2>
+  <p class="sec-sub">El resultado central del producto. El índigo queda reservado para
+  interacción: si una superficie es índigo, se puede pulsar; si es verde, ámbar, rojo o gris,
+  es un veredicto.</p>
+
+  <div class="chips" style="margin-bottom:22px">
+    <span class="chip met">cumple</span>
+    <span class="chip partial">cumple_parcialmente</span>
+    <span class="chip unmet">no_cumple</span>
+    <span class="chip review">revision_manual</span>
+  </div>
+
+  <div class="grid g4">
+    <div class="swatch"><div class="fill" style="background:#0a6640"></div>
+      <div class="meta"><b>cumple</b><span>#0f7b4f</span>
+      <div style="color:var(--mute);margin-top:5px">Evidencia suficiente, vigente y compatible</div></div></div>
+    <div class="swatch"><div class="fill" style="background:#8a5a1f"></div>
+      <div class="meta"><b>cumple_parcialmente</b><span>#9b6829</span>
+      <div style="color:var(--mute);margin-top:5px">Solo para requisitos divisibles con criterio validado</div></div></div>
+    <div class="swatch"><div class="fill" style="background:#a82f22"></div>
+      <div class="meta"><b>no_cumple</b><span>#c0392b</span>
+      <div style="color:var(--mute);margin-top:5px">Incumplimiento demostrado</div></div></div>
+    <div class="swatch"><div class="fill" style="background:#55647c"></div>
+      <div class="meta"><b>revision_manual</b><span>#64748d</span>
+      <div style="color:var(--mute);margin-top:5px">No evaluable: falta, ambigüedad o ilegible</div></div></div>
+  </div>
+
+  <div class="note dont" style="margin-top:22px">
+    <b>revision_manual es gris, no rojo.</b> La ausencia de evidencia no es incumplimiento.
+    Si una falta de documento se pintara de rojo, el analista leería un fallo donde solo hay
+    información pendiente — y eso cambia una decisión de licitación. El rojo se reserva para
+    incumplimiento demostrado.
+    <div style="margin-top:11px;padding-top:11px;border-top:1px solid rgba(0,0,0,.09)">
+      <b>Contraste verificado.</b> Los cuatro colores se comprobaron contra su propio fondo al
+      12%, que es el emparejamiento real. Los primeros valores quedaban por debajo del umbral
+      AA de 4.5:1 (4.08–4.48:1); se oscurecieron manteniendo la familia hasta 4.98–5.86:1.
+    </div>
+  </div>
+</section>
+
+<section id="tabla">
+  <h2>Tabla de oportunidades</h2>
+  <p class="sec-sub">La superficie de trabajo. Filas de 44px, hairlines horizontales sin reglas
+  verticales, cifras tabulares en toda fecha e identificador. Los valores desconocidos se
+  muestran como guion, nunca como cero.</p>
+
+  <div class="tbl-wrap">
+    <table class="dense">
+      <thead><tr>
+        <th>Entidad</th><th>Referencia</th><th>Modalidad</th>
+        <th>Publicación</th><th>Estado</th>
+      </tr></thead>
+      <tbody>
+        <tr class="sel">
+          <td><div class="t-entity">E.S.E. Hospital Local de Zona Bananera</div>
+              <div class="t-title">Orden de prestación de servicio</div></td>
+          <td class="tnum">CO1.REQ.10389856</td>
+          <td>Contratación directa</td>
+          <td class="tnum">2026-01-28</td>
+          <td><span class="chip unmet">no_cumple</span></td>
+        </tr>
+        <tr>
+          <td><div class="t-entity">Universidad Nacional de Colombia</div>
+              <div class="t-title">Prestar los servicios profesionales en fisioterapia</div></td>
+          <td class="tnum">CO1.REQ.10365486</td>
+          <td>Contratación directa</td>
+          <td class="tnum">2026-01-29</td>
+          <td><span class="chip met">cumple</span></td>
+        </tr>
+        <tr>
+          <td><div class="t-entity">ESENTTIA S.A.</div>
+              <div class="t-title">Suministro de varios</div></td>
+          <td class="tnum">CO1.REQ.10367038</td>
+          <td>Mínima cuantía</td>
+          <td class="tnum">2026-01-28</td>
+          <td><span class="chip partial">cumple_parcialmente</span></td>
+        </tr>
+        <tr>
+          <td><div class="t-entity">Instituto de Patrimonio y Cultura</div>
+              <div class="t-title">Insumos agenda y manual de convivencia</div></td>
+          <td class="tnum">CO1.REQ.9999986</td>
+          <td class="unknown">—</td>
+          <td class="unknown">—</td>
+          <td><span class="chip review">revision_manual</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="hint">Las dos últimas filas muestran dato desconocido como <span class="mono">—</span>
+  en gris. Rellenarlas con <span class="mono">0</span> o dejarlas vacías haría creer que el dato
+  existe y vale cero.</p>
+
+  <div class="rule"></div>
+  <h3>Filtros</h3>
+  <div class="grid g3">
+    <div><label class="f" for="q">Buscar</label>
+      <input class="i" id="q" placeholder="Entidad, referencia o título"></div>
+    <div><label class="f" for="m">Modalidad</label>
+      <select class="i" id="m"><option>Todas</option><option>Contratación directa</option>
+      <option>Mínima cuantía</option></select></div>
+    <div><label class="f" for="d">Publicado desde</label>
+      <input class="i" id="d" type="date" value="2026-01-01"></div>
+  </div>
+  <div style="display:flex;gap:10px;margin-top:18px">
+    <button class="btn btn-p">Sincronizar ahora</button>
+    <button class="btn btn-s">Guardar filtro</button>
+    <button class="btn btn-q">Limpiar</button>
+  </div>
+</section>
+
+<section id="evidencia">
+  <h2>Evidencia: tres niveles</h2>
+  <p class="sec-sub">Cada afirmación del sistema debe ser distinguible de la fuente que la
+  sustenta. Los tres niveles se diferencian sin depender solo del color.</p>
+
+  <div class="grid g2">
+    <div>
+      <div class="card">
+        <div class="lbl">Requisito y su evidencia</div>
+        <div style="font-size:14px;color:var(--ink);margin-bottom:12px">
+          El proponente debe acreditar experiencia mínima de cinco (5) años en
+          interventoría de obras de infraestructura vial.
+        </div>
+
+        <div class="ev-quote">
+          «El proponente deberá acreditar experiencia mínima de cinco (5) años en
+          interventoría de obras de infraestructura vial, mediante certificaciones
+          expedidas por el contratante.»
+          <span class="src">Pliego de condiciones · <span class="locator">pág. 24, §3.2.1</span></span>
+        </div>
+
+        <div class="ev-interp">
+          <span class="cat">Interpretación del sistema · Experiencia</span>
+          Se acredita con certificaciones de contratante. La norma habla de años, no de
+          número de contratos.
+        </div>
+
+        <div class="ev-human">
+          <span style="font-size:10px;font-weight:500;letter-spacing:.7px;text-transform:uppercase;color:var(--primary)">Decisión humana</span>
+          <div style="margin-top:6px">Se acepta el certificado del contrato 2021-045 por 5 años
+          2 meses. Los contratos 2019-112 y 2020-008 se suman por superposición parcial.</div>
+          <span class="who">Ana M. · 2026-09-17 14:32 · revisión registrada</span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="lbl">Confianza de la extracción</div>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div>
+            <div class="conf"><span class="bars"><i class="on"></i><i class="on"></i><i class="on"></i></span>
+              <span>Alta · cita verificada en el pliego</span></div>
+          </div>
+          <div>
+            <div class="conf"><span class="bars"><i class="on"></i><i class="half"></i><i></i></span>
+              <span>Media · texto OCR de baja calidad</span></div>
+          </div>
+          <div>
+            <div class="conf"><span class="bars"><i class="on"></i><i></i><i></i></span>
+              <span>Baja · requisito ambiguo, requiere lectura</span></div>
+          </div>
+        </div>
+        <hr class="rule">
+        <div class="note" style="margin:0">
+          La confianza es <b>monocroma a propósito</b>. Si tomara prestados los colores de
+          estado, un «cumple» con confianza baja se leería como un fallo.
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:22px">
+        <div class="lbl">Localizador no verificable</div>
+        <div style="display:flex;align-items:center;gap:9px;font-size:13.5px">
+          <span style="color:var(--state-unmet)">●</span>
+          <span>Cita no encontrada en el documento fuente</span>
+        </div>
+        <p class="hint" style="margin-top:9px">Un localizador que no se puede resolver es una
+        afirmación rota: bloquea el requisito automático en lugar de mostrarlo como válido.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="revision">
+  <h2>Revisión y preparación</h2>
+  <p class="sec-sub">La revisión humana es obligatoria antes del informe. Un cambio posterior
+  no invalida retroactivamente: crea una versión nueva.</p>
+
+  <div class="grid g2">
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="banner pending">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
+        <div><b>Requiere revisión antes del informe.</b>
+        <div style="color:var(--ink-2);margin-top:3px">4 requisitos en revisión manual y 2 sin
+        evidencia empresarial asignada.</div></div>
+      </div>
+
+      <div class="banner approved">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="var(--state-met)" stroke-width="2"
+          stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>
+        <div><b>Aprobado.</b> Expediente v3 · Perfil v7 · Análisis v2
+        <div class="ts">Ana M. · 2026-09-17 14:32</div></div>
+      </div>
+
+      <div class="banner stale">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="var(--state-partial)" stroke-width="2"
+          stroke-linecap="round"><path d="M12 8v5M12 16h.01"/><circle cx="12" cy="12" r="9"/></svg>
+        <div><b>Aprobación no vigente.</b> Se añadió el documento «Adenda 2» después de aprobar.
+        <div class="ts">Requiere nueva revisión de los requisitos afectados</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="lbl">Preparación del expediente</div>
+      <div class="ready">
+        <div class="it"><span class="dot ok"></span>Pliego de condiciones
+          <span class="tag">12 pág. · leído</span></div>
+        <div class="it"><span class="dot ok"></span>Adenda 1
+          <span class="tag">3 pág. · leído</span></div>
+        <div class="it"><span class="dot miss"></span>Anexo técnico
+          <span class="tag">no aportado</span></div>
+        <div class="it"><span class="dot bad"></span>Formatos financieros
+          <span class="tag">OCR deficiente</span></div>
+      </div>
+      <hr class="rule">
+      <div class="note" style="margin:0">
+        Un documento no aportado se muestra en <b>gris</b>, no en rojo. No es un fallo del
+        pliego ni del analista, y colorearlo de rojo sesgaría la lectura del expediente.
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="tipografia">
+  <h2>Tipografía</h2>
+  <p class="sec-sub">Peso 300 con tracking negativo en display. Serif para la cita textual del
+  pliego: distingue la voz del documento de la voz del sistema sin recurrir al color. Mono para
+  localizadores, que son referencias técnicas verificables.</p>
+
+  <div class="type-row"><span class="nm">display-lg 32/300</span>
+    <span style="font-size:32px;letter-spacing:-.64px">Preevaluación de licitaciones</span>
+    <span class="sp">-0.64px</span></div>
+  <div class="type-row"><span class="nm">heading-md 20/300</span>
+    <span style="font-size:20px;letter-spacing:-.2px">Requisitos de experiencia</span>
+    <span class="sp">-0.2px</span></div>
+  <div class="type-row"><span class="nm">body-md 15/300</span>
+    <span>El proponente debe acreditar experiencia mínima de cinco años.</span>
+    <span class="sp">0</span></div>
+  <div class="type-row"><span class="nm">quote (serif)</span>
+    <span style="font-family:var(--serif);font-size:15px">«...acreditar experiencia mínima de
+    cinco (5) años...»</span><span class="sp">serif</span></div>
+  <div class="type-row"><span class="nm">body-tabular</span>
+    <span class="tnum">CO1.REQ.10389856 · 2026-01-28 · $573.333.333</span>
+    <span class="sp">tnum</span></div>
+  <div class="type-row"><span class="nm">locator (mono)</span>
+    <span class="locator">pág. 24, §3.2.1</span><span class="sp">mono</span></div>
+  <div class="type-row"><span class="nm">category-label</span>
+    <span style="font-size:11px;font-weight:500;letter-spacing:.6px;text-transform:uppercase">Experiencia</span>
+    <span class="sp">+0.6px</span></div>
+</section>
+
+<section>
+  <h2>Reglas que no se negocian</h2>
+  <div class="grid g2" style="margin-top:18px">
+    <div class="note" style="margin:0">
+      <b>El índigo es interacción; el color de estado es significado.</b> Nunca compiten.
+      Un solo botón índigo relleno por vista.
+    </div>
+    <div class="note dont" style="margin:0">
+      <b>Nunca mostrar interpretación del sistema con el mismo tratamiento que la cita
+      textual.</b> Es el fallo más grave que puede cometer esta interfaz: haría pasar un
+      requisito inventado por una cita del pliego.
+    </div>
+    <div class="note" style="margin:0">
+      <b>Ningún veredicto sin su cita y localizador accesibles.</b> Sin fuente verificable,
+      el requisito se bloquea.
+    </div>
+    <div class="note dont" style="margin:0">
+      <b>Un dato desconocido no es cero.</b> Se muestra como guion explícito en gris.
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div>EAG Ingenieros · Sistema de diseño derivado de <span class="mono">stripe/DESIGN.md</span>
+  de VoltAgent/awesome-design-md, extendido para análisis documental.</div>
+</footer>
+</div>
+</body>
+</html>
