@@ -1,0 +1,67 @@
+# Entorno de desarrollo del proyecto: base de datos y API.
+#
+# Sin dependencias externas ni cuentas de terceros. Todo el estado vive en
+# volúmenes propios con prefijo `eag-`, y los puertos son distintos de los de
+# cualquier otro stack de la máquina.
+#
+# Uso:
+#   cp .env.example .env      # y ajustar los secretos
+#   docker compose up -d
+#   docker compose exec api python -m alembic upgrade head
+#   docker compose exec api python -m scripts.crear_admin --email ... --password ...
+
+name: eag-licitaciones-dev
+
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: eag-dev-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-eag}
+      POSTGRES_USER: ${POSTGRES_USER:-eag}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD en .env}
+      # El contenedor solo escucha en la red interna; el puerto publicado en el
+      # host es para inspección con psql durante el desarrollo.
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    ports:
+      - "${POSTGRES_PORT:-5445}:5432"
+    volumes:
+      - eag-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-eag} -d ${POSTGRES_DB:-eag}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: ../../apps/api
+      dockerfile: Dockerfile
+    container_name: eag-dev-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      EAG_ENVIRONMENT: development
+      EAG_DATABASE_URL: postgresql://${POSTGRES_USER:-eag}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-eag}
+      # Obligatorio: la API se niega a arrancar sin secreto de firma, porque
+      # arrancar con uno por defecto permitiría emitir tokens válidos a
+      # cualquiera que leyera el código.
+      EAG_JWT_SECRET: ${EAG_JWT_SECRET:?defina EAG_JWT_SECRET en .env}
+      EAG_CORS_ALLOWED_ORIGINS: ${EAG_CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+      EAG_SECOP_PAGE_SIZE: ${EAG_SECOP_PAGE_SIZE:-100}
+      EAG_SECOP_MAX_REQUESTS: ${EAG_SECOP_MAX_REQUESTS:-50}
+    ports:
+      - "${API_PORT:-8131}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+volumes:
+  eag-db-data:
+    name: eag-licitaciones-db-data

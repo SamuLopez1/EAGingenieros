@@ -22,6 +22,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     DateTime,
     ForeignKey,
     Index,
@@ -33,6 +34,18 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.types import JSON, TypeEngine
+
+# JSONB en PostgreSQL —con índice y consultas por contenido— y JSON en otros
+# motores. Sin esta variante, las pruebas no pueden usar SQLite en memoria y
+# habría que levantar un PostgreSQL solo para probar la lógica de negocio.
+JsonColumn = JSON().with_variant(JSONB(), "postgresql")
+
+# BIGINT en PostgreSQL e INTEGER en SQLite. SQLite solo autoincrementa una
+# columna declarada exactamente `INTEGER PRIMARY KEY`; con BIGINT la clave
+# queda nula y toda inserción falla. Esta variante permite probar la lógica de
+# negocio en memoria sin renunciar a BIGINT donde importa.
+BigIntColumn: TypeEngine[int] = BigInteger().with_variant(Integer(), "sqlite")
 
 
 class Base(DeclarativeBase):
@@ -59,7 +72,7 @@ class Opportunity(Base):
         Index("ix_opportunity_status", "status"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigIntColumn, primary_key=True, autoincrement=True)
     source_dataset: Mapped[str] = mapped_column(String(32), nullable=False)
     source_id: Mapped[str] = mapped_column(String(128), nullable=False)
 
@@ -73,7 +86,7 @@ class Opportunity(Base):
     official_url: Mapped[str | None] = mapped_column(Text)
 
     # Carga original de la fuente. Permite auditar y renormalizar sin red.
-    raw_payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    raw_payload: Mapped[dict[str, object]] = mapped_column(JsonColumn, nullable=False)
 
     first_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
@@ -95,7 +108,7 @@ class SyncRun(Base):
 
     __tablename__ = "sync_runs"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigIntColumn, primary_key=True, autoincrement=True)
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
@@ -139,3 +152,106 @@ class SyncCursor(Base):
     )
 
     run: Mapped[SyncRun | None] = relationship()
+
+
+class User(Base):
+    """Persona con acceso al sistema.
+
+    No hay registro público: las cuentas se crean por invitación de un
+    administrador. El correo se normaliza a minúsculas antes de guardarlo, de
+    modo que la unicidad no dependa de cómo lo escriba el usuario.
+    """
+
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(BigIntColumn, primary_key=True, autoincrement=True)
+    email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True)
+    display_name: Mapped[str | None] = mapped_column(String(200))
+    password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    role: Mapped[str] = mapped_column(String(32), nullable=False)
+
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Cambiar la contraseña o desactivar la cuenta invalida los access tokens
+    # ya emitidos sin necesidad de mantener una lista de revocación: basta con
+    # comparar esta marca con el `iat` del token.
+    password_changed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    def __repr__(self) -> str:  # pragma: no cover - ayuda de depuración
+        return f"<User {self.id} {self.role}>"
+
+
+class Session(Base):
+    """Sesión renovable de un usuario.
+
+    El refresh token se guarda hasheado, nunca en claro: un volcado de la base
+    no debe permitir suplantar sesiones activas.
+
+    ``family_id`` agrupa todos los tokens derivados de un mismo inicio de
+    sesión. Si un refresh token ya rotado se presenta de nuevo, se revoca la
+    familia completa, porque eso indica que alguien copió el token.
+    """
+
+    __tablename__ = "sessions"
+
+    id: Mapped[int] = mapped_column(BigIntColumn, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    family_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    refresh_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Marca el momento en que este token se usó para rotar. Un token con
+    # `used_at` que vuelve a presentarse es una señal de robo.
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    user_agent: Mapped[str | None] = mapped_column(String(300))
+    ip_address: Mapped[str | None] = mapped_column(String(64))
+
+    user: Mapped[User] = relationship()
+
+    @property
+    def is_usable(self) -> bool:
+        return self.revoked_at is None and self.used_at is None
+
+    def __repr__(self) -> str:  # pragma: no cover - ayuda de depuración
+        return f"<Session {self.id} user={self.user_id}>"
+
+
+class AuditEvent(Base):
+    """Registro de acciones relevantes para auditoría.
+
+    Nunca guarda contraseñas, tokens ni cabeceras de autorización. ``metadata``
+    solo admite datos no sensibles, y esa restricción se aplica en el código que
+    escribe, no confiando en quien lo llame.
+    """
+
+    __tablename__ = "audit_events"
+
+    id: Mapped[int] = mapped_column(BigIntColumn, primary_key=True, autoincrement=True)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    actor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    target_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    outcome: Mapped[str] = mapped_column(String(16), nullable=False, default="ok")
+    metadata_json: Mapped[dict[str, object]] = mapped_column(
+        JsonColumn, nullable=False, default=dict
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - ayuda de depuración
+        return f"<AuditEvent {self.action} {self.outcome}>"
