@@ -169,10 +169,33 @@ def assemble_answer(
         )
 
     if raw_answer is None:
+        # Se distinguen dos situaciones que antes se confundían:
+        #
+        #   - hay un modelo conectado y no respondió: es un fallo, y no se puede
+        #     afirmar nada, así que `has_evidence` es False;
+        #   - no hay modelo conectado todavía: la recuperación sí encontró
+        #     evidencia y ocultarla haría que la interfaz mostrara «sin
+        #     evidencia» sobre documentos que la contienen, que es justo lo
+        #     contrario de lo que este sistema debe comunicar.
+        #
+        # Detectar esto durante las pruebas costó un rato: la respuesta decía
+        # «sin evidencia» mientras la lista de fragmentos venía llena.
+        if retrieval.chunks:
+            notes = [
+                *notes,
+                "recuperación sin síntesis: no hay modelo de lenguaje conectado, "
+                "se devuelven los fragmentos para revisión humana",
+            ]
+            return RagAnswer(
+                question=question,
+                has_evidence=True,
+                retrieved=retrieval.chunks,
+                notes=notes,
+            )
         return RagAnswer(
             question=question,
             has_evidence=False,
-            retrieved=retrieval.chunks,
+            retrieved=[],
             no_evidence_reason="no se obtuvo respuesta del modelo",
             notes=notes,
         )

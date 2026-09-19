@@ -76,6 +76,12 @@ class TokenService:
         self._audience = audience
         self._access_ttl = access_ttl
 
+    @property
+    def access_ttl_seconds(self) -> int:
+        """Duración del access token, para calcular cuándo se emitió."""
+
+        return int(self._access_ttl.total_seconds())
+
     def issue(
         self,
         *,

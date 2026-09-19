@@ -331,15 +331,35 @@ def test_partial_support_keeps_valid_claims_and_reports_rejections() -> None:
     assert any("se descartaron" in n for n in answer.notes)
 
 
-def test_missing_model_answer_is_no_evidence() -> None:
+def test_retrieval_without_a_model_returns_the_chunks() -> None:
+    """Sin modelo conectado, la evidencia recuperada debe exponerse.
+
+    Ocultarla mostraría «sin evidencia» sobre documentos que sí la contienen,
+    que es lo contrario de lo que este sistema debe comunicar. Antes se
+    confundía con el caso de un modelo que no responde.
+    """
+
     from app.rag.retriever import RetrievalResult
 
     retrieval = RetrievalResult(chunks=[chunk("evidencia")], threshold=0.35, question="q")
 
     answer = assemble_answer(question="q", retrieval=retrieval, raw_answer=None)
 
+    assert answer.has_evidence
+    assert answer.retrieved
+    assert any("sin síntesis" in n for n in answer.notes)
+
+
+def test_missing_model_answer_without_chunks_is_no_evidence() -> None:
+    """Sin evidencia recuperada ni respuesta, no hay nada que afirmar."""
+
+    from app.rag.retriever import RetrievalResult
+
+    retrieval = RetrievalResult(chunks=[], threshold=0.35, question="q")
+
+    answer = assemble_answer(question="q", retrieval=retrieval, raw_answer=None)
+
     assert answer.refused
-    assert "modelo" in (answer.no_evidence_reason or "")
 
 
 # --- Recuperador contra base de datos -------------------------------------

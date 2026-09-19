@@ -40,6 +40,36 @@ class Settings(BaseSettings):
     # supervisión consuma la cuota disponible.
     secop_max_requests: int = Field(default=50, ge=1)
 
+    # --- Autenticación ---------------------------------------------------
+    # Secreto de firma de los tokens de sesión. Debe tener al menos 32
+    # caracteres: con HS256 es la única barrera, y quien lo tenga puede emitir
+    # tokens válidos para cualquier usuario. Sin él, la API no debe arrancar con
+    # autenticación habilitada.
+    jwt_secret: SecretStr | None = None
+
+    # --- Representación vectorial (RAG) ---------------------------------
+    # Sin proveedor configurado se usa el representador local determinista, que
+    # no entiende de significado pero permite ejecutar y probar el sistema
+    # completo. El modo se declara en /health para no confundirlo con un
+    # entorno semántico real.
+    embeddings_base_url: AnyHttpUrl | None = None
+    embeddings_api_key: SecretStr | None = None
+    embeddings_model: str | None = None
+    embeddings_dimensions: int = Field(default=1024, ge=64, le=4096)
+
+    # Umbral de similitud por debajo del cual un fragmento no se considera
+    # evidencia. Es el parámetro que decide entre responder y declarar ausencia.
+    #
+    # Valor por defecto medido con el representador local sobre un pliego real:
+    # una consulta que reproduce el texto del fragmento relevante da 0.32-0.38,
+    # y una consulta sin relación da 0.00-0.07. El umbral se sitúa por debajo del
+    # extremo inferior del primer rango para no descartar evidencia válida.
+    #
+    # Con un modelo semántico real los valores serán distintos —habitualmente
+    # más altos— y el umbral debe recalibrarse. Por eso es configurable.
+    rag_similarity_threshold: float = Field(default=0.25, ge=0.0, le=1.0)
+    rag_max_chunks: int = Field(default=6, ge=1, le=20)
+
     @field_validator("cors_allowed_origins", mode="before")
     @classmethod
     def split_origins(cls, value: object) -> object:
@@ -59,6 +89,31 @@ class Settings(BaseSettings):
                     "cada origen CORS debe ser un origen, sin ruta, consulta ni fragmento"
                 )
         return origins
+
+    def require_jwt_secret(self) -> str:
+        if self.jwt_secret is None or not self.jwt_secret.get_secret_value():
+            raise RuntimeError(
+                "EAG_JWT_SECRET no está configurada; la autenticación la requiere"
+            )
+        return self.jwt_secret.get_secret_value()
+
+    @property
+    def embeddings_are_configured(self) -> bool:
+        """Indica si hay un proveedor de representaciones configurado."""
+
+        return bool(
+            self.embeddings_base_url and self.embeddings_api_key and self.embeddings_model
+        )
+
+    def require_embeddings_base_url(self) -> str:
+        if self.embeddings_base_url is None:
+            raise RuntimeError("EAG_EMBEDDINGS_BASE_URL no está configurada")
+        return str(self.embeddings_base_url)
+
+    def require_embeddings_api_key(self) -> str:
+        if self.embeddings_api_key is None:
+            raise RuntimeError("EAG_EMBEDDINGS_API_KEY no está configurada")
+        return self.embeddings_api_key.get_secret_value()
 
     @property
     def database_is_configured(self) -> bool:

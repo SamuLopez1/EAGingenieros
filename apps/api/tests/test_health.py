@@ -16,6 +16,9 @@ def test_health_returns_public_status_version_and_environment() -> None:
         "version": "test-version",
         "environment": "test",
         "persistence": "memory",
+        # El representador local no entiende de significado: se declara para no
+        # confundir una demostración con recuperación semántica real.
+        "embeddings": "local_sin_semantica",
     }
 
 

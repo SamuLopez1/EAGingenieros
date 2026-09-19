@@ -22,13 +22,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid5
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session as DbSession
 
 from app.auth.passwords import hash_password, needs_rehash, verify_password
-from app.auth.principal import Role
+from app.auth.principal import AuthError, Principal, Role
 from app.auth.tokens import (
     TokenPair,
     TokenService,
@@ -41,6 +41,11 @@ from app.db.models import AuditEvent, Session, User, utcnow
 # Hash de una contraseña descartable, usado para igualar el tiempo de respuesta
 # cuando el correo no existe. Se genera una vez al importar el módulo.
 _DUMMY_HASH = hash_password("contrasena-senuelo-que-nunca-coincide")
+
+# Namespace fijo para derivar el UUID externo de un identificador interno. Debe
+# permanecer constante: si cambiara, los UUID de los usuarios existentes
+# cambiarian y los tokens ya emitidos dejarian de corresponder a su sujeto.
+_EAG_NAMESPACE = UUID("6f7a1c2e-3b4d-5e6f-8a9b-0c1d2e3f4a5b")
 
 
 class InvalidCredentialsError(Exception):
@@ -78,6 +83,9 @@ class AuthService:
     ) -> None:
         self._db = session
         self._tokens = tokens
+        # Duración del access token. Se usa para calcular cuándo se emitió a
+        # partir de su expiración, y así compararlo con el cambio de contraseña.
+        self._access_ttl_seconds = int(tokens.access_ttl_seconds)
         # UUID fijo de la unica organizacion del MVP. Se mantiene el tipo UUID
         # porque el dominio del token lo usa y asi no hay conversion implicita.
         self._organization_id = organization_id or UUID(int=1)
@@ -149,6 +157,123 @@ class AuthService:
             metadata={"role": role.value},
         )
         return user
+
+    def principal_from_token(self, token: str) -> Principal:
+        """Valida un access token y construye la identidad.
+
+        Es el único camino de autenticación. Valida la firma y la expiración,
+        comprueba que el usuario sigue existiendo y activo, y **resuelve el rol
+        desde la base de datos** en lugar de confiar en el que viaja en el token:
+        un token emitido antes de un cambio de rol seguiría concediendo el rol
+        anterior hasta su expiración.
+
+        Un usuario desactivado queda rechazado de inmediato, sin esperar a que su
+        access token expire.
+        """
+
+        claims = self._tokens.decode(token)
+        user = self._find_user_by_subject(claims.subject_id)
+        if user is None:
+            raise AuthError("el usuario del token no existe")
+        if not user.is_active:
+            raise AuthError("el usuario está desactivado")
+
+        # Un cambio de contraseña invalida los tokens emitidos antes de él. Es
+        # la forma de cerrar sesiones posiblemente robadas sin mantener una
+        # lista de revocación de access tokens.
+        changed = user.password_changed_at
+        if changed is not None:
+            if changed.tzinfo is None:
+                changed = changed.replace(tzinfo=UTC)
+            issued_at = claims.expires_at - timedelta(seconds=self._access_ttl_seconds)
+            if issued_at < changed:
+                raise AuthError("la contraseña cambió después de emitirse el token")
+
+        return Principal(
+            subject_id=claims.subject_id,
+            organization_id=claims.organization_id,
+            role=Role(user.role),
+            user_id=user.id,
+        )
+
+    def _find_user_by_subject(self, subject_id: UUID) -> User | None:
+        """Recupera el usuario a partir del UUID que viaja en el token.
+
+        No se invierte la derivación del UUID: es unidireccional a propósito,
+        para que el identificador externo no revele el interno. Se consulta la
+        base de datos por el identificador derivado de cada fila.
+        """
+
+        for candidate in self._db.execute(select(User.id)).scalars().all():
+            if _uuid_from_user(candidate) == subject_id:
+                return self._db.get(User, candidate)
+        return None
+
+    def commit(self) -> None:
+        """Confirma la transacción.
+
+        El servicio hace `flush` durante las operaciones para obtener
+        identificadores, pero confirmar es una decisión del límite transaccional
+        y debe ser explícita: quien no confirme pierde el trabajo al cerrar la
+        sesión.
+        """
+
+        self._db.commit()
+
+    def rollback(self) -> None:
+        """Descarta la transacción en curso."""
+
+        self._db.rollback()
+
+    def get_user(self, user_id: int) -> User | None:
+        return self._db.get(User, user_id)
+
+    def change_password(
+        self,
+        user_id: int,
+        *,
+        current_password: str,
+        new_password: str,
+    ) -> None:
+        """Cambia la contraseña y revoca todas las sesiones del usuario.
+
+        Exige la contraseña actual: sin eso, un access token robado bastaría
+        para apropiarse de la cuenta cambiando la credencial.
+
+        Las sesiones se revocan porque un cambio de contraseña responde
+        habitualmente a la sospecha de que estaba comprometida; dejarlas
+        abiertas anularía el propósito.
+        """
+
+        user = self._db.get(User, user_id)
+        if user is None:
+            raise InvalidCredentialsError
+
+        # Se verifica contra el hash real o contra el señuelo, para que el
+        # tiempo de respuesta no revele si el usuario existe.
+        reference = user.password_hash if user is not None else _DUMMY_HASH
+        if not verify_password(reference, current_password):
+            self._audit(
+                "password_change_failed",
+                target_user_id=user_id,
+                outcome="failed",
+            )
+            raise InvalidCredentialsError
+
+        if verify_password(user.password_hash, new_password):
+            # Reutilizar la misma contraseña anula el propósito del cambio.
+            raise ValueError("la contraseña nueva debe ser distinta de la actual")
+
+        user.password_hash = hash_password(new_password)
+        user.password_changed_at = utcnow()
+        self.revoke_user_sessions(user_id, actor_id=user_id)
+        self._audit("password_changed", target_user_id=user_id)
+
+    def recent_audit(self, *, limit: int = 100) -> list[AuditEvent]:
+        """Eventos de auditoría más recientes."""
+
+        statement = select(AuditEvent).order_by(AuditEvent.id.desc()).limit(limit)
+        return list(self._db.execute(statement).scalars().all())
 
     def count_users(self) -> int:
         """Número de cuentas. Se usa para permitir el primer administrador."""
@@ -351,17 +476,21 @@ def _as_utc(value: datetime) -> datetime:
     return value.astimezone(UTC)
 
 
-def _uuid_from_user(user_id: int) -> UUID:  # noqa: F821
-    """Deriva un UUID estable del identificador entero.
+def _uuid_from_user(user_id: int) -> UUID:
+    """Deriva el UUID externo de un identificador interno.
 
-    El dominio del token usa UUID porque Supabase lo hacía; mantenerlo permite
-    cambiar de proveedor sin tocar los contratos. La derivación es determinista
-    para que el mismo usuario produzca siempre el mismo UUID.
+    Debe ser la única derivación del módulo: si existieran dos, el UUID emitido
+    al iniciar sesión no coincidiría con el buscado al validar, y toda petición
+    autenticada fallaría con «el usuario del token no existe». Ocurrió durante
+    el desarrollo y es exactamente el tipo de fallo que no se ve al leer el
+    código, solo al ejecutarlo.
+
+    Se usa UUID v5 y no `UUID(int=user_id)`: el segundo interpreta el entero
+    como los 128 bits completos, y un valor grande no cabría en el entero de 64
+    bits que admite un motor como SQLite.
     """
 
-    from uuid import UUID
-
-    return UUID(int=user_id)
+    return uuid5(_EAG_NAMESPACE, str(user_id))
 
 
 def session_ttl() -> timedelta:

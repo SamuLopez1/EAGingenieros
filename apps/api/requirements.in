@@ -17,6 +17,11 @@ pytesseract
 pyjwt
 argon2-cffi
 cryptography
+# Subida de archivos multipart. email-validator se instala porque pydantic lo
+# importa al usar tipos de correo; la validacion propia de las rutas no depende
+# de el, pero el import de pydantic si.
+python-multipart
+email-validator
 # Pruebas y calidad. reportlab genera PDF reales para las pruebas; types-openpyxl
 # aporta los stubs que mypy estricto necesita.
 pytest

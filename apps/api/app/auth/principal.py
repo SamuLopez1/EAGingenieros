@@ -19,7 +19,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Annotated, Protocol
+from typing import Annotated, Protocol, cast
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, status
@@ -45,15 +45,35 @@ class PermissionError_(Exception):
 
 @dataclass(frozen=True)
 class Principal:
-    """Identidad autenticada con su pertenencia resuelta en el servidor."""
+    """Identidad autenticada con su pertenencia resuelta en el servidor.
+
+    Lleva dos representaciones del sujeto a propósito:
+
+    - `subject_id`: el UUID que viaja en el token y se expone hacia fuera.
+    - `user_id`: la clave primaria entera, que es lo que usan las relaciones de
+      la base de datos. Derivar el entero desde el UUID no es posible sin
+      ambigüedad, y usar el entero del UUID como clave foránea apuntaría a un
+      usuario que no existe.
+    """
 
     subject_id: UUID
     organization_id: UUID
     role: Role
+    user_id: int
 
     @property
     def is_administrator(self) -> bool:
         return self.role is Role.ADMINISTRATOR
+
+
+class AuthServiceProtocol(Protocol):
+    """Contrato mínimo del servicio de autenticación usado por las rutas.
+
+    Se declara aquí y no se importa de `service` para evitar una dependencia
+    circular: `service` ya importa `Principal` de este módulo.
+    """
+
+    def principal_from_token(self, token: str) -> Principal: ...
 
 
 class TokenValidator(Protocol):
@@ -61,7 +81,9 @@ class TokenValidator(Protocol):
 
 
 class MembershipResolver(Protocol):
-    def resolve(self, subject_id: UUID, token: str) -> tuple[UUID, Role] | None: ...
+    """Resuelve la pertenencia y devuelve también la clave primaria del usuario."""
+
+    def resolve(self, subject_id: UUID, token: str) -> tuple[UUID, Role, int] | None: ...
 
 
 @dataclass
@@ -74,9 +96,12 @@ class AuthServices:
         found = self.memberships.resolve(subject, token)
         if found is None:
             raise PermissionError_
-        organization_id, role = found
+        organization_id, role, user_id = found
         return Principal(
-            subject_id=subject, organization_id=organization_id, role=role
+            subject_id=subject,
+            organization_id=organization_id,
+            role=role,
+            user_id=user_id,
         )
 
 
@@ -104,15 +129,20 @@ def get_current_principal(request: Request, credentials: Credentials) -> Princip
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise _unauthorized()
 
-    services: AuthServices | None = getattr(request.app.state, "auth_services", None)
-    if services is None:
+    # El servicio de autenticación valida el token y resuelve la pertenencia.
+    # Se obtiene de la fábrica registrada por la aplicación en lugar de
+    # construirse aquí, para que la sesión de base de datos tenga su propio
+    # límite transaccional.
+    factory = getattr(request.app.state, "auth_service_factory", None)
+    if factory is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="La autenticación no está configurada.",
         )
 
     try:
-        return services.authenticate(credentials.credentials)
+        service: AuthServiceProtocol = cast(AuthServiceProtocol, factory())
+        return service.principal_from_token(credentials.credentials)
     except AuthNotConfiguredError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

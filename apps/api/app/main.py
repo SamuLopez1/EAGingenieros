@@ -15,6 +15,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.api.auth_routes import router as auth_router
+from app.api.knowledge_routes import router as knowledge_router
 from app.api.routes import router as opportunities_router
 from app.config import Settings
 from app.contracts import HealthResponse
@@ -25,6 +27,9 @@ from app.db.repository import (
 )
 from app.db.session import create_engine_from_url, create_session_factory, session_scope
 from app.db.sync_service import SyncService
+from app.rag.embeddings import build_embedder
+from app.rag.ingestion import IngestionService
+from app.rag.retriever import Retriever
 from app.secop.client import PROCESSES_DATASET, HttpxClient, SecopClient
 
 
@@ -102,7 +107,63 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     repository, session_factory, dispose = build_persistence(active_settings)
     app.state.opportunity_repository = repository
     app.state.persistence_mode = "database" if session_factory else "memory"
+    app.state.session_factory = session_factory
     app.state.dispose_persistence = dispose
+
+    # El representador se construye una vez: es sin estado y crearlo por
+    # petición añadiría trabajo sin motivo.
+    embedder = build_embedder(active_settings)
+    app.state.embedder_model = embedder.model_id
+
+    def make_ingestion_service() -> IngestionService:
+        """Servicio de ingesta con su propia sesión.
+
+        Se abre una sesión por operación: la ingesta puede tardar —OCR de un
+        pliego de decenas de páginas— y mantener una sesión viva durante todo
+        ese tiempo retendría una conexión del pool sin necesidad.
+        """
+
+        if session_factory is None:
+            raise RuntimeError(
+                "la base de conocimiento requiere persistencia configurada"
+            )
+        return IngestionService(session_factory(), embedder=embedder)
+
+    def make_retriever() -> Retriever:
+        if session_factory is None:
+            raise RuntimeError("el recuperador requiere persistencia configurada")
+        return Retriever(
+            session_factory(),
+            embedder=embedder,
+            threshold=active_settings.rag_similarity_threshold,
+            default_limit=active_settings.rag_max_chunks,
+        )
+
+    app.state.ingestion_service_factory = (
+        make_ingestion_service if session_factory else None
+    )
+    app.state.retriever_factory = make_retriever if session_factory else None
+
+    # Servicio de autenticación. Se construye por operación porque cada una
+    # necesita su propia sesión y su propio límite transaccional.
+    #
+    # El secreto de firma se exige **al autenticar**, no al construir la
+    # aplicación: exigirlo aquí impediría arrancar en tareas que no usan
+    # autenticación —generar el cliente OpenAPI, ejecutar una migración— y
+    # obligaría a definir un secreto en entornos donde no se necesita.
+    from app.auth.service import AuthService
+    from app.auth.tokens import TokenService
+
+    def make_auth_service() -> AuthService:
+        if session_factory is None:
+            raise RuntimeError("la autenticación requiere persistencia configurada")
+        return AuthService(
+            session_factory(),
+            tokens=TokenService(secret=active_settings.require_jwt_secret()),
+        )
+
+    app.state.auth_service_factory = make_auth_service if session_factory else None
+    app.state.authentication_enabled = active_settings.jwt_secret is not None
 
     def make_sync_service() -> SyncService:
         """Crea un servicio de sincronización con recursos propios.
@@ -146,9 +207,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             version=active_settings.app_version,
             environment=active_settings.environment,
             persistence=app.state.persistence_mode,
+            # Se declara el representador en uso: el local no entiende de
+            # significado, y confundirlo con un modelo semántico llevaría a
+            # conclusiones equivocadas sobre la calidad de la recuperación.
+            embeddings=(
+                "proveedor_externo"
+                if active_settings.embeddings_are_configured
+                else "local_sin_semantica"
+            ),
         )
 
+    app.include_router(auth_router)
     app.include_router(opportunities_router)
+    app.include_router(knowledge_router)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:

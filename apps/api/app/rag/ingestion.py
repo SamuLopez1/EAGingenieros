@@ -77,6 +77,18 @@ class IngestionService:
         self._embedder = embedder
         self._store = store
 
+    def commit(self) -> None:
+        """Confirma la transacción.
+
+        Se expone en lugar de dejar que quien llama acceda a la sesión: el
+        servicio hace `flush` para obtener identificadores durante la ingesta,
+        pero confirmar es una decisión del límite transaccional y debe ser
+        explícita. Los llamadores que no confirmen pierden el trabajo al cerrar
+        la sesión.
+        """
+
+        self._db.commit()
+
     def _existing_by_hash(self, digest: str) -> KnowledgeDocument | None:
         return self._db.execute(
             select(KnowledgeDocument).where(
