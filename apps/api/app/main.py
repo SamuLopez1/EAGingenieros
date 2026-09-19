@@ -15,6 +15,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.api.analysis_routes import router as analysis_router
 from app.api.auth_routes import router as auth_router
 from app.api.knowledge_routes import MAX_UPLOAD_BYTES
 from app.api.knowledge_routes import router as knowledge_router
@@ -167,6 +168,52 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.retriever_factory = make_retriever if session_factory else None
 
+    # --- Perfil empresarial y análisis -----------------------------------
+    from app.analysis import AnalysisDependencies, RuleBasedExtractor
+    from app.profile.service import ProfileService
+
+    def make_profile_service() -> ProfileService:
+        if session_factory is None:
+            raise RuntimeError("el perfil requiere persistencia configurada")
+        return ProfileService(session_factory())
+
+    def make_analysis_dependencies() -> AnalysisDependencies:
+        """Dependencias del grafo, con sesiones propias por consulta.
+
+        Cada llamada abre su sesión: el grafo puede tardar minutos y mantener una
+        sesión viva todo ese tiempo retendría una conexión del pool.
+        """
+
+        if session_factory is None:
+            raise RuntimeError("el análisis requiere persistencia configurada")
+
+        def load_chunks(document_ids):  # type: ignore[no-untyped-def]
+            # Se recuperan los fragmentos de los documentos indicados con una
+            # consulta amplia: el análisis necesita su texto completo, no los
+            # más relevantes para una pregunta concreta.
+            retriever = Retriever(
+                session_factory(), embedder=embedder, threshold=0.0, default_limit=50
+            )
+            found = retriever.retrieve("requisitos del pliego", limit=50)
+            return [c for c in found.chunks if c.document_id in set(document_ids)]
+
+        return AnalysisDependencies(
+            load_chunks=load_chunks,
+            extract_requirements=RuleBasedExtractor(),
+            retrieve_evidence=lambda question: Retriever(
+                session_factory(),
+                embedder=embedder,
+                threshold=active_settings.rag_similarity_threshold,
+                default_limit=active_settings.rag_max_chunks,
+            ).retrieve(question).chunks,
+            threshold=active_settings.rag_similarity_threshold,
+        )
+
+    app.state.profile_service_factory = make_profile_service if session_factory else None
+    app.state.analysis_dependencies_factory = (
+        make_analysis_dependencies if session_factory else None
+    )
+
     # Servicio de autenticación. Se construye por operación porque cada una
     # necesita su propia sesión y su propio límite transaccional.
     #
@@ -243,6 +290,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(auth_router)
     app.include_router(opportunities_router)
     app.include_router(knowledge_router)
+    app.include_router(analysis_router)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:

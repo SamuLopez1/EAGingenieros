@@ -28,6 +28,10 @@ pyclamd
 # de el, pero el import de pydantic si.
 python-multipart
 email-validator
+# Grafo de analisis. El checkpointer de Postgres permite reanudar un analisis
+# largo sin repetirlo desde el principio.
+langgraph
+langgraph-checkpoint-postgres
 # Pruebas y calidad. reportlab genera PDF reales para las pruebas; types-openpyxl
 # aporta los stubs que mypy estricto necesita.
 pytest
