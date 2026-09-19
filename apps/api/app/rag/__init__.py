@@ -10,6 +10,12 @@ from app.rag.answering import (
     parse_and_verify,
 )
 from app.rag.chunking import DEFAULT_CHUNK_SIZE, DEFAULT_OVERLAP, Chunk, chunk_text
+from app.rag.ingestion import (
+    IngestionError,
+    IngestionOutcome,
+    IngestionService,
+    content_hash,
+)
 from app.rag.retriever import (
     Embedder,
     KnowledgeUnavailableError,
@@ -24,6 +30,10 @@ __all__ = [
     "NO_EVIDENCE_MESSAGE",
     "Chunk",
     "Embedder",
+    "IngestionError",
+    "IngestionOutcome",
+    "IngestionService",
+    "content_hash",
     "KnowledgeUnavailableError",
     "RagAnswer",
     "RetrievalResult",
