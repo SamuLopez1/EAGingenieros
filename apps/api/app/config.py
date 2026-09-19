@@ -47,6 +47,16 @@ class Settings(BaseSettings):
     # autenticación habilitada.
     jwt_secret: SecretStr | None = None
 
+    # --- Cuarentena de archivos ------------------------------------------
+    # Antivirus ClamAV por socket. Sin él configurado, los archivos se aceptan
+    # pero se declara que no se analizaron.
+    clamav_host: str | None = None
+    clamav_port: int = Field(default=3310, ge=1, le=65535)
+    # Exigir el análisis para aceptar el archivo. Debe activarse en cualquier
+    # entorno que reciba archivos de fuera: sin esto, una caída del antivirus se
+    # convierte en una vía de entrada sin analizar en lugar de un rechazo.
+    require_antivirus: bool = False
+
     # --- Representación vectorial (RAG) ---------------------------------
     # Sin proveedor configurado se usa el representador local determinista, que
     # no entiende de significado pero permite ejecutar y probar el sistema

@@ -153,8 +153,10 @@ def test_upload_rejects_unsupported_format(client: TestClient) -> None:
         data={"title": "Comprimido"},
     )
 
-    assert response.status_code == 400
-    assert ".pdf" in response.json()["detail"]
+    # 422 y no 400: la petición está bien formada, es el contenido el que no
+    # se puede procesar.
+    assert response.status_code == 422
+    assert "tipo" in str(response.json()["detail"]).lower()
 
 
 def test_upload_rejects_an_unknown_category(client: TestClient) -> None:
@@ -177,7 +179,8 @@ def test_upload_rejects_an_empty_file(client: TestClient) -> None:
         data={"title": "Vacío"},
     )
 
-    assert response.status_code == 400
+    assert response.status_code == 422
+    assert response.json()["detail"]["reason"] == "vacio"
 
 
 def test_upload_rejects_an_oversized_file(client: TestClient) -> None:
@@ -203,13 +206,12 @@ def test_upload_requires_a_title(client: TestClient) -> None:
     assert response.status_code == 422
 
 
-def test_upload_reports_unreadable_content_without_server_error(
-    client: TestClient,
-) -> None:
-    """Un PDF ilegible es un fallo de contenido, no del servidor.
+def test_upload_rejects_content_that_is_not_really_a_pdf(client: TestClient) -> None:
+    """Un `.pdf` que no es un PDF se rechaza en la validación, no al procesarlo.
 
-    Se devuelve 201 con el estado «fallido» para que quede registrado, en lugar
-    de un 4xx que haría perder el motivo.
+    Rechazarlo aquí da un motivo claro —«el contenido no corresponde a ningún
+    formato soportado»— en lugar de un fallo de extracción más adelante, que
+    sería confuso para quien sube el archivo.
     """
 
     response = client.post(
@@ -218,10 +220,8 @@ def test_upload_reports_unreadable_content_without_server_error(
         data={"title": "Roto", "category": "experiencia"},
     )
 
-    assert response.status_code == 201
-    body = response.json()
-    assert body["status"] == "fallido"
-    assert body["error"]
+    assert response.status_code == 422
+    assert response.json()["detail"]["reason"] == "tipo_no_coincide"
 
 
 def test_upload_accepts_docx(client: TestClient) -> None:

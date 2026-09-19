@@ -17,6 +17,12 @@ pytesseract
 pyjwt
 argon2-cffi
 cryptography
+# Validacion de archivos: filetype mira el contenido real, defusedxml evita
+# bombas de entidades al leer XML dentro de DOCX y XLSX, pyclamd habla con
+# ClamAV por socket.
+filetype
+defusedxml
+pyclamd
 # Subida de archivos multipart. email-validator se instala porque pydantic lo
 # importa al usar tipos de correo; la validacion propia de las rutas no depende
 # de el, pero el import de pydantic si.

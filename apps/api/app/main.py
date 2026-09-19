@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.api.auth_routes import router as auth_router
+from app.api.knowledge_routes import MAX_UPLOAD_BYTES
 from app.api.knowledge_routes import router as knowledge_router
 from app.api.routes import router as opportunities_router
 from app.config import Settings
@@ -27,6 +28,7 @@ from app.db.repository import (
 )
 from app.db.session import create_engine_from_url, create_session_factory, session_scope
 from app.db.sync_service import SyncService
+from app.documents.validation import ClamAvScanner
 from app.rag.embeddings import build_embedder
 from app.rag.ingestion import IngestionService
 from app.rag.retriever import Retriever
@@ -110,10 +112,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.session_factory = session_factory
     app.state.dispose_persistence = dispose
 
+
     # El representador se construye una vez: es sin estado y crearlo por
     # petición añadiría trabajo sin motivo.
     embedder = build_embedder(active_settings)
     app.state.embedder_model = embedder.model_id
+
+    # Antivirus. Se construye una vez: es sin estado y solo abre el socket
+    # cuando se le pide un análisis.
+    if active_settings.clamav_host:
+        app.state.antivirus_scanner = ClamAvScanner(
+            host=active_settings.clamav_host,
+            port=active_settings.clamav_port,
+        )
+    else:
+        app.state.antivirus_scanner = None
+    app.state.require_antivirus = active_settings.require_antivirus
 
     def make_ingestion_service() -> IngestionService:
         """Servicio de ingesta con su propia sesión.
@@ -127,7 +141,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise RuntimeError(
                 "la base de conocimiento requiere persistencia configurada"
             )
-        return IngestionService(session_factory(), embedder=embedder)
+        return IngestionService(
+            session_factory(),
+            embedder=embedder,
+            # El antivirus se pasa también aquí, no solo a la ruta: la ingesta
+            # puede invocarse desde un script o una tarea programada, y su
+            # validación debe disponer de las mismas herramientas.
+            scanner=app.state.antivirus_scanner,
+            require_antivirus=active_settings.require_antivirus,
+            max_bytes=MAX_UPLOAD_BYTES,
+        )
 
     def make_retriever() -> Retriever:
         if session_factory is None:

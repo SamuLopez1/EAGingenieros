@@ -16,9 +16,7 @@ La lista de comprobaciones que sí se aplican aquí:
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable
-from pathlib import Path
 from typing import Annotated, cast
 
 from fastapi import (
@@ -43,6 +41,13 @@ from app.api.contracts import (
 )
 from app.auth.principal import CurrentPrincipal
 from app.db.knowledge_models import KnowledgeDocument
+from app.documents.validation import (
+    AntivirusScanner,
+    validate_upload,
+)
+from app.documents.validation import (
+    safe_filename as sanitise_filename,
+)
 from app.rag.answering import assemble_answer
 from app.rag.ingestion import IngestionService
 from app.rag.retriever import Retriever
@@ -65,21 +70,9 @@ ALLOWED_CATEGORIES = {
     "no_clasificado",
 }
 
-_UNSAFE_NAME = re.compile(r"[^A-Za-z0-9._-]")
-
-
-def safe_filename(name: str | None) -> str | None:
-    """Reduce el nombre a algo que no pueda escapar de su directorio.
-
-    Un nombre como `../../etc/passwd` o uno con bytes nulos no debe llegar nunca
-    al sistema de archivos. Se conserva solo lo que es inequívocamente un nombre.
-    """
-
-    if not name:
-        return None
-    base = Path(name).name  # descarta cualquier componente de ruta
-    cleaned = _UNSAFE_NAME.sub("_", base).strip("._")
-    return cleaned[:200] or None
+# El saneador de nombres vive en el módulo de validación, que es la única
+# fuente de verdad sobre qué se acepta y qué no.
+safe_filename = sanitise_filename
 
 
 def get_ingestion_service(request: Request) -> IngestionService:
@@ -93,6 +86,25 @@ def get_ingestion_service(request: Request) -> IngestionService:
             detail="La base de conocimiento no está configurada.",
         )
     return factory()
+
+
+def get_scanner(request: Request) -> AntivirusScanner | None:
+    """Antivirus configurado, o None si no hay ninguno."""
+
+    return cast(
+        "AntivirusScanner | None",
+        getattr(request.app.state, "antivirus_scanner", None),
+    )
+
+
+def settings_require_antivirus(request: Request) -> bool:
+    """Indica si el antivirus es obligatorio en este entorno.
+
+    Se recomienda activarlo donde se reciban archivos de fuera: sin él, una
+    caída del antivirus se convierte en una vía de entrada sin analizar.
+    """
+
+    return bool(getattr(request.app.state, "require_antivirus", False))
 
 
 def get_retriever(request: Request) -> Retriever:
@@ -139,14 +151,10 @@ async def upload_document(
     """
 
     filename = safe_filename(file.filename)
-    suffix = Path(filename or "").suffix.lower()
-    if suffix not in ALLOWED_EXTENSIONS:
+    if filename is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"formato no soportado: {suffix or 'desconocido'}. "
-                f"Soportados: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
-            ),
+            detail="el nombre del archivo no es utilizable",
         )
 
     if category not in ALLOWED_CATEGORIES:
@@ -158,22 +166,41 @@ async def upload_document(
             ),
         )
 
-    declared = file.size
-    if declared is not None and declared > MAX_UPLOAD_BYTES:
+    # El tamaño se comprueba antes de leer: leer un archivo enorme para luego
+    # rechazarlo consumiría memoria del servidor sin necesidad, y con varias
+    # subidas simultáneas bastaría para agotarla.
+    if file.size is not None and file.size > MAX_UPLOAD_BYTES:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=f"el archivo supera el límite de {MAX_UPLOAD_BYTES // (1024 * 1024)} MB",
         )
 
     data = await file.read()
     if len(data) > MAX_UPLOAD_BYTES:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=f"el archivo supera el límite de {MAX_UPLOAD_BYTES // (1024 * 1024)} MB",
         )
-    if not data:
+
+    # Validación y cuarentena. Es la única barrera entre contenido no confiable
+    # y el resto del sistema, así que un rechazo aquí no es un error del
+    # servidor: es el control funcionando.
+    scanner = get_scanner(request)
+    validation = validate_upload(
+        data,
+        filename=filename,
+        declared_content_type=file.content_type,
+        max_bytes=MAX_UPLOAD_BYTES,
+        scanner=scanner,
+        require_antivirus=settings_require_antivirus(request),
+    )
+    if not validation.accepted:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="el archivo está vacío"
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "reason": str(validation.reason) if validation.reason else "rechazado",
+                "detail": validation.detail,
+            },
         )
 
     try:

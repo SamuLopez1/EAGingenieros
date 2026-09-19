@@ -240,26 +240,43 @@ def test_replaced_document_keeps_its_chunks(db: Session) -> None:
 # --- Fallos ----------------------------------------------------------------
 
 
-def test_unsupported_format_is_reported(db: Session) -> None:
+def test_unsupported_format_is_rejected_before_creating_anything(db: Session) -> None:
+    """Un archivo que nunca debió aceptarse no crea registro.
+
+    La validación va antes del hash y de la extracción, así que un formato no
+    admitido no llega a crear un documento. Crear una fila «fallida» para algo
+    que se rechazó en la puerta llenaría la tabla de ruido.
+    """
+
     service = IngestionService(db, embedder=FakeEmbedder())
 
     outcome = service.ingest(b"PKdatos", title="Comprimido", filename="x.zip")
 
-    assert outcome.status == "no_soportado"
+    assert outcome.status == "rechazado"
     assert not outcome.succeeded
-    assert ".pdf" in (outcome.error or "")
+    assert outcome.document_id is None
 
 
-def test_unsupported_document_is_not_marked_as_indexed(db: Session) -> None:
-    """Un fallo silencioso sería peor: pasaría por documento indexado."""
+def test_content_that_is_not_really_a_pdf_is_rejected(db: Session) -> None:
+    """Un `.pdf` que no es un PDF se rechaza: no llega al extractor."""
 
     service = IngestionService(db, embedder=FakeEmbedder())
     outcome = service.ingest(b"basura", title="Roto", filename="r.pdf")
 
-    document = db.get(KnowledgeDocument, outcome.document_id)
-    assert document is not None
-    assert document.index_status == "fallido"
-    assert document.index_error
+    assert outcome.status == "rechazado"
+    assert outcome.document_id is None
+    assert "tipo" in (outcome.error or "").lower()
+
+
+def test_rejected_file_leaves_no_trace_in_the_database(db: Session) -> None:
+    """Nada que se rechace en la puerta debe llegar a la base."""
+
+    service = IngestionService(db, embedder=FakeEmbedder())
+    service.ingest(b"basura", title="Roto", filename="r.pdf")
+
+    from sqlalchemy import select as sel
+
+    assert db.execute(sel(KnowledgeDocument)).scalars().all() == []
 
 
 def test_embedding_failure_is_reported(db: Session) -> None:

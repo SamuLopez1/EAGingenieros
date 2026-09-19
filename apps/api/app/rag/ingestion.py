@@ -31,6 +31,7 @@ from sqlalchemy.orm import Session
 
 from app.db.knowledge_models import KnowledgeChunk, KnowledgeDocument
 from app.documents.extraction import ExtractionResult, ExtractionStatus, extract
+from app.documents.validation import AntivirusScanner, validate_upload
 from app.rag.chunking import chunk_text
 from app.rag.retriever import Embedder
 
@@ -72,10 +73,20 @@ class IngestionService:
         # Guarda el archivo y devuelve su ruta. Se inyecta para no acoplar la
         # ingesta al mecanismo de almacenamiento.
         store: Callable[[bytes, str, str | None], str] | None = None,
+        scanner: AntivirusScanner | None = None,
+        require_antivirus: bool = False,
+        max_bytes: int = 20 * 1024 * 1024,
     ) -> None:
         self._db = session
         self._embedder = embedder
         self._store = store
+        # La validación se repite aquí aunque la ruta ya la haya hecho: la
+        # ingesta es pública y puede invocarse desde un script o una tarea
+        # programada. Confiar en que quien llama validó convierte la barrera en
+        # opcional sin que nadie lo note.
+        self._scanner = scanner
+        self._require_antivirus = require_antivirus
+        self._max_bytes = max_bytes
 
     def commit(self) -> None:
         """Confirma la transacción.
@@ -113,6 +124,28 @@ class IngestionService:
         replaces: int | None = None,
     ) -> IngestionOutcome:
         """Extrae, fragmenta, vectoriza y persiste un documento."""
+
+        # Validación y cuarentena. Va antes del hash para no calcular nada
+        # sobre contenido que no debería procesarse.
+        validation = validate_upload(
+            data,
+            filename=filename,
+            declared_content_type=content_type,
+            max_bytes=self._max_bytes,
+            scanner=self._scanner,
+            require_antivirus=self._require_antivirus,
+        )
+        if not validation.accepted:
+            return IngestionOutcome(
+                document_id=None,
+                status="rechazado",
+                warnings=list(validation.warnings),
+                error=(
+                    f"{validation.reason}: {validation.detail}"
+                    if validation.reason
+                    else validation.detail
+                ),
+            )
 
         digest = content_hash(data)
 
@@ -246,7 +279,7 @@ class IngestionService:
             document_id=document.id,
             status="indexado",
             chunks_indexed=len(chunks),
-            warnings=list(extraction.warnings),
+            warnings=list(validation.warnings) + list(extraction.warnings),
         )
 
     def reindex(
