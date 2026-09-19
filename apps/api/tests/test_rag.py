@@ -399,3 +399,39 @@ def test_citation_without_locator_still_names_the_document() -> None:
     evidence = chunk("texto", title="Certificado", locator=None)
 
     assert evidence.citation == "Certificado"
+
+
+def test_overlap_never_starts_mid_word() -> None:
+    """Regresión de un defecto real encontrado con un PDF.
+
+    El retroceso del solapamiento se hacía por número de caracteres, así que el
+    fragmento siguiente empezaba a mitad de palabra ("ONDICIONES" en lugar de
+    "CONDICIONES"). Degrada la representación vectorial y muestra al analista
+    una cita mutilada.
+    """
+
+    texto = (
+        "PLIEGO DE CONDICIONES. El proponente debe acreditar experiencia minima "
+        "de cinco anos en interventoria vial. "
+    ) * 12
+
+    chunks = chunk_text(texto, size=400, overlap=120)
+
+    assert len(chunks) > 1
+    for chunk in chunks:
+        first = chunk.content.split()[0]
+        # La primera palabra debe existir en el texto original como palabra
+        # completa: un fragmento cortado produciría algo como "ONDICIONES".
+        assert first in texto.split(), f"fragmento empieza a mitad de palabra: {first!r}"
+
+
+def test_single_long_line_is_split_at_word_boundaries() -> None:
+    """Un texto sin saltos de línea (típico de PDF) también debe cortarse limpio."""
+
+    texto = "requisito de experiencia en interventoria vial " * 40
+
+    chunks = chunk_text(texto, size=300, overlap=80)
+
+    assert len(chunks) > 1
+    for chunk in chunks:
+        assert chunk.content.split()[0] in texto.split()

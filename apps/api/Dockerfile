@@ -9,10 +9,29 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /srv
 
-# Las dependencias se copian e instalan antes que el código para aprovechar la
-# caché de capas: cambiar un archivo de la aplicación no reinstala todo.
+# Dependencias del sistema para la extracción de documentos:
+#   - tesseract-ocr y su paquete de español: reconocimiento de PDF escaneados.
+#     Sin el idioma instalado, el OCR de un pliego en español devolvería basura
+#     sin dar error, que es peor que fallar.
+#   - poppler-utils: pdf2image lo necesita para rasterizar páginas.
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y \
+        tesseract-ocr \
+        tesseract-ocr-spa \
+        poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+# Las dependencias de Python se copian e instalan antes que el código para
+# aprovechar la caché de capas: cambiar un archivo de la aplicación no
+# reinstala todo.
 COPY requirements.lock ./
 RUN pip install --no-cache-dir -r requirements.lock
+
+# Verificación en tiempo de construcción: si falta el idioma español o
+# poppler, el OCR fallaría en producción de forma silenciosa. Mejor fallar aquí.
+RUN tesseract --list-langs 2>&1 | grep -qx spa \
+    && command -v pdftoppm >/dev/null \
+    && echo "OCR listo: tesseract con español y poppler presentes"
 
 COPY app ./app
 COPY migrations ./migrations

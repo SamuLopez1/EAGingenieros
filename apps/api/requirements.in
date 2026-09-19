@@ -6,6 +6,21 @@ httpx
 sqlalchemy
 psycopg[binary]
 alembic
+pgvector
+# Extraccion de documentos
+pypdf
+python-docx
+openpyxl
+pdf2image
+pytesseract
+# Autenticacion
+pyjwt
+argon2-cffi
+cryptography
+# Pruebas y calidad. reportlab genera PDF reales para las pruebas; types-openpyxl
+# aporta los stubs que mypy estricto necesita.
 pytest
+reportlab
+types-openpyxl
 ruff
 mypy

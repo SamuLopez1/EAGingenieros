@@ -28,7 +28,6 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 from pgvector.sqlalchemy import Vector
-from sqlalchemy.dialects import postgresql
 
 revision: str = "20260918000003"
 down_revision: str | None = "20260917000002"
@@ -64,7 +63,9 @@ def upgrade() -> None:
         sa.Column("uploaded_by", sa.BigInteger(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["replaced_by_id"], ["knowledge_documents.id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(
+            ["replaced_by_id"], ["knowledge_documents.id"], ondelete="SET NULL"
+        ),
         sa.ForeignKeyConstraint(["uploaded_by"], ["users.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
     )

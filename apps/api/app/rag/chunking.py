@@ -96,9 +96,19 @@ def _hard_split(text: str, size: int, overlap: int) -> list[str]:
             pieces.append(piece)
         if end >= length:
             break
-        # El siguiente fragmento empieza antes para no perder el contexto
-        # que quedó a caballo entre ambos.
-        start = max(end - overlap, start + 1)
+        # El siguiente fragmento empieza antes para no perder el contexto que
+        # quedo a caballo entre ambos. El retroceso debe caer en un limite de
+        # palabra: retroceder N caracteres sin mas produce fragmentos que
+        # empiezan a mitad de palabra ("ONDICIONES" en vez de "CONDICIONES"),
+        # lo que degrada la representacion vectorial y muestra al analista una
+        # cita mutilada. Se busca el limite hacia ADELANTE desde el retroceso,
+        # nunca hacia atras, para no solapar mas de lo pedido.
+        back = max(end - overlap, start + 1)
+        if back > start + 1:
+            boundary = text.find(" ", back, end)
+            if boundary != -1:
+                back = boundary + 1
+        start = back
     return pieces
 
 
@@ -148,10 +158,35 @@ def chunk_text(
         )
         ordinal += 1
         # El solapamiento se toma del final del fragmento emitido, para que una
-        # cláusula partida aparezca completa en al menos uno de los dos.
-        tail = content[-overlap:] if len(content) > overlap else ""
-        buffer = [tail] if tail else []
-        buffer_len = len(tail)
+        # clausula partida aparezca completa en al menos uno de los dos.
+        #
+        # Reglas, aprendidas de un defecto real:
+        #   - el solapamiento nunca puede ser mayor que el fragmento, o el
+        #     siguiente fragmento empezaria con el anterior entero duplicado;
+        #   - el corte debe caer en un limite de palabra, o el fragmento empieza
+        #     a mitad de palabra ("ONDICIONES" en vez de "CONDICIONES"), lo que
+        #     degrada la representacion vectorial y muestra al analista una cita
+        #     mutilada.
+        tail = ""
+        effective_overlap = min(overlap, len(content) // 3)
+        if effective_overlap >= 20:
+            # El candidato empieza necesariamente a mitad de palabra, porque se
+            # toma por numero de caracteres. Lo correcto es **descartar** el
+            # principio del candidato hasta el primer limite limpio, no buscar
+            # un limite y cortar ahi: eso agravaria el problema.
+            candidate = content[-effective_overlap:]
+            sentence = candidate.find(". ")
+            space = candidate.find(" ")
+            if sentence >= 0:
+                # Empezar en la frase siguiente: el texto queda completo.
+                tail = candidate[sentence + 2 :]
+            elif space >= 0:
+                tail = candidate[space + 1 :]
+            else:
+                # Sin ningun espacio: es una sola palabra larguisima. Se omite
+                # el solapamiento en lugar de duplicar texto mutilado.
+                tail = ""
+        buffer = [tail] if tail.strip() else []
         pending_page = current_page
         pending_section = current_section
 
