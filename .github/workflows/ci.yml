@@ -19,6 +19,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.14"
+      # Dependencias del sistema para la extracción de documentos. Sin poppler,
+      # pdf2image no puede rasterizar y las pruebas de OCR fallan; sin el
+      # paquete de español, el OCR devolvería texto inservible sin dar error.
+      # Se instalan aquí para que CI pruebe el mismo entorno que producción.
+      - name: Instalar dependencias de OCR
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            tesseract-ocr tesseract-ocr-spa poppler-utils
+          tesseract --list-langs
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -r requirements.lock
       - run: python -m ruff check .
