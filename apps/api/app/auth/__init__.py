@@ -1,5 +1,8 @@
 """Autenticación propia: contraseñas, tokens, sesiones y permisos."""
 
+from app.auth.accounts import AccountService, normalise_email
+from app.auth.audit import AuditLog
+from app.auth.identity import subject_for_user
 from app.auth.passwords import (
     MIN_PASSWORD_LENGTH,
     WeakPasswordError,
@@ -21,13 +24,12 @@ from app.auth.principal import (
     require_roles,
 )
 from app.auth.service import (
-    AuthenticatedUser,
     AuthService,
     InvalidCredentialsError,
     SessionExpiredError,
     TokenReuseError,
-    normalise_email,
 )
+from app.auth.sessions import SessionService
 from app.auth.tokens import (
     ACCESS_TOKEN_TTL,
     REFRESH_TOKEN_TTL,
@@ -41,6 +43,11 @@ from app.auth.tokens import (
 
 __all__ = [
     "ACCESS_TOKEN_TTL",
+    "AccountService",
+    "AuditLog",
+    "SessionService",
+    "normalise_email",
+    "subject_for_user",
     "MIN_PASSWORD_LENGTH",
     "REFRESH_TOKEN_TTL",
     "AccessTokenClaims",
@@ -48,7 +55,6 @@ __all__ = [
     "AuthNotConfiguredError",
     "AuthService",
     "AuthServices",
-    "AuthenticatedUser",
     "CurrentPrincipal",
     "InvalidCredentialsError",
     "MembershipResolver",
@@ -66,7 +72,6 @@ __all__ = [
     "hash_password",
     "hash_refresh_token",
     "needs_rehash",
-    "normalise_email",
     "refresh_expiry",
     "require_roles",
     "verify_password",
