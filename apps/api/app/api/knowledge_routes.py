@@ -41,11 +41,11 @@ from app.api.contracts import (
 )
 from app.auth.principal import CurrentPrincipal
 from app.db.knowledge_models import KnowledgeDocument
-from app.documents.validation import (
+from app.documents import (
     AntivirusScanner,
     validate_upload,
 )
-from app.documents.validation import (
+from app.documents import (
     safe_filename as sanitise_filename,
 )
 from app.rag.answering import assemble_answer

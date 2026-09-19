@@ -12,15 +12,15 @@ import zipfile
 
 import pytest
 
-from app.documents.validation import (
-    AntivirusUnavailableError,
-    QuarantineReason,
+from app.documents.antivirus import AntivirusUnavailableError
+from app.documents.archive_inspector import inspect_archive
+from app.documents.content_inspector import (
     detect_content_type,
     detect_dangerous_signature,
-    inspect_zip,
-    safe_filename,
-    validate_upload,
 )
+from app.documents.filenames import safe_filename
+from app.documents.validation import validate_upload
+from app.documents.validation_types import QuarantineReason
 
 # --- Generadores -----------------------------------------------------------
 
@@ -245,7 +245,7 @@ def test_zip_slip_is_detected() -> None:
 
     data = make_zip({"../../etc/passwd": b"contenido"})
 
-    reason, detail, _ = inspect_zip(data)
+    reason, detail = inspect_archive(data)
 
     assert reason is QuarantineReason.ZIP_SLIP
     assert "intenta salir" in (detail or "")
@@ -254,7 +254,7 @@ def test_zip_slip_is_detected() -> None:
 def test_absolute_path_in_zip_is_detected() -> None:
     data = make_zip({"/etc/passwd": b"contenido"})
 
-    reason, _, _ = inspect_zip(data)
+    reason, _ = inspect_archive(data)
 
     assert reason is QuarantineReason.ZIP_SLIP
 
@@ -264,7 +264,7 @@ def test_compression_bomb_is_detected() -> None:
 
     data = make_zip({"grande.txt": b"\x00" * (5 * 1024 * 1024)})
 
-    reason, detail, _ = inspect_zip(data)
+    reason, detail = inspect_archive(data)
 
     assert reason is QuarantineReason.ZIP_BOMB
 
@@ -274,7 +274,7 @@ def test_macros_in_docx_are_detected() -> None:
 
     data = make_docx(with_macros=True)
 
-    reason, detail, _ = inspect_zip(data)
+    reason, detail = inspect_archive(data)
 
     assert reason is QuarantineReason.MACROS
     assert "macros" in (detail or "")
@@ -283,7 +283,7 @@ def test_macros_in_docx_are_detected() -> None:
 def test_executable_inside_zip_is_detected() -> None:
     data = make_zip({"payload.exe": b"MZ\x90\x00"})
 
-    reason, _, _ = inspect_zip(data)
+    reason, _ = inspect_archive(data)
 
     assert reason is QuarantineReason.DANGEROUS_TYPE
 
@@ -291,13 +291,13 @@ def test_executable_inside_zip_is_detected() -> None:
 def test_normal_zip_passes_inspection() -> None:
     data = make_zip({"documento.txt": b"contenido normal"})
 
-    reason, _, _ = inspect_zip(data)
+    reason, _ = inspect_archive(data)
 
     assert reason is None
 
 
 def test_corrupt_zip_is_detected() -> None:
-    reason, _, _ = inspect_zip(b"PK\x03\x04datos corruptos")
+    reason, _ = inspect_archive(b"PK\x03\x04datos corruptos")
 
     assert reason is QuarantineReason.CORRUPT
 
@@ -434,7 +434,7 @@ def test_xml_entity_bomb_is_rejected() -> None:
 
     data = make_zip({"[Content_Types].xml": b"<Types/>", "word/document.xml": bomb})
 
-    reason, detail, _ = inspect_zip(data)
+    reason, detail = inspect_archive(data)
 
     assert reason is QuarantineReason.DANGEROUS_TYPE
     assert "prohibidas" in (detail or "") or "xml" in (detail or "").lower()
@@ -443,17 +443,16 @@ def test_xml_entity_bomb_is_rejected() -> None:
 def test_valid_docx_xml_passes_inspection() -> None:
     """Un documento normal no debe verse afectado por la revisión de XML."""
 
-    reason, _, _ = inspect_zip(make_docx())
+    reason, _ = inspect_archive(make_docx())
 
     assert reason is None
 
 
-def test_invalid_xml_warns_without_rejecting() -> None:
-    """Un XML que no parsea no es peligroso, pero el documento no será utilizable."""
+def test_invalid_xml_does_not_reject_the_document() -> None:
+    """Un XML que no parsea no es peligroso; el documento se procesa igual."""
 
     data = make_zip({"[Content_Types].xml": b"<Types/>", "word/document.xml": b"<roto"})
 
-    reason, _, warnings = inspect_zip(data)
+    reason, _ = inspect_archive(data)
 
     assert reason is None
-    assert any("no es válido" in w for w in warnings)

@@ -29,7 +29,7 @@ from app.db.repository import (
 )
 from app.db.session import create_engine_from_url, create_session_factory, session_scope
 from app.db.sync_service import SyncService
-from app.documents.validation import ClamAvScanner
+from app.documents import ClamAvScanner
 from app.rag.embeddings import build_embedder
 from app.rag.ingestion import IngestionService
 from app.rag.retriever import Retriever
