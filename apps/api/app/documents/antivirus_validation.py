@@ -1,11 +1,13 @@
-"""Comprobación con antivirus dentro del flujo de validación.
+"""Uso del antivirus dentro del flujo de validación.
 
-Envuelve el escáner para traducir su resultado al contrato de validación.
+Traduce el resultado del escáner al contrato de validación. Vive aparte del
+escáner porque cambia por motivos distintos: el escáner cambia si cambia ClamAV;
+este módulo, si cambia el contrato de validación.
 
-La decisión que concentra este módulo: cuando el antivirus no puede analizar, el
-resultado depende de si el análisis es obligatorio. Si lo es, se rechaza —un
-antivirus caído no es un archivo limpio—. Si no lo es, se acepta pero se declara
-que no se analizó, para que quien lea el resultado no lo confunda con «limpio».
+La decisión que concentra: cuando el antivirus no puede analizar, el resultado
+depende de si el análisis es obligatorio. Si lo es, se rechaza —un antivirus
+caído no es un archivo limpio—. Si no, se acepta declarando que no se analizó,
+para que nadie confunda «sin analizar» con «limpio».
 """
 
 from __future__ import annotations

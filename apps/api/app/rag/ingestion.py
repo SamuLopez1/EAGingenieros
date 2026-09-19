@@ -30,8 +30,13 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.db.knowledge_models import KnowledgeChunk, KnowledgeDocument
-from app.documents import AntivirusScanner, validate_upload
-from app.documents.extraction import ExtractionResult, ExtractionStatus, extract
+from app.documents import (
+    AntivirusScanner,
+    ExtractionResult,
+    ExtractionStatus,
+    extract,
+    validate_upload,
+)
 from app.rag.chunking import chunk_text
 from app.rag.retriever import Embedder
 

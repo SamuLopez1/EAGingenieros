@@ -10,7 +10,7 @@ sin gastar un análisis de antivirus.
 from __future__ import annotations
 
 from app.documents.antivirus import AntivirusScanner
-from app.documents.antivirus_check import check_antivirus
+from app.documents.antivirus_validation import check_antivirus
 from app.documents.archive_inspector import inspect_archive
 from app.documents.content_inspector import (
     detect_content_type,

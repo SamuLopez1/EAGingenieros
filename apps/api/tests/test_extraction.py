@@ -9,16 +9,12 @@ from __future__ import annotations
 
 import io
 
-from app.documents.extraction import (
-    MIN_CHARS_PER_PAGE,
-    SUPPORTED_EXTENSIONS,
-    ExtractionStatus,
-    extract,
-    extract_docx,
-    extract_pdf,
-    extract_xlsx,
-    looks_like_scanned_pdf,
-)
+from app.documents import extract, looks_like_scanned_pdf
+from app.documents.docx_extraction import extract_docx
+from app.documents.extraction_types import ExtractionStatus
+from app.documents.ocr_policy import MIN_CHARS_PER_PAGE
+from app.documents.pdf_extraction import extract_pdf
+from app.documents.xlsx_extraction import extract_xlsx
 
 # --- Generadores de documentos reales -------------------------------------
 
@@ -345,6 +341,8 @@ def test_result_is_not_usable_when_failed() -> None:
 
 
 def test_supported_extensions_are_documented() -> None:
+    from app.documents.dispatch import SUPPORTED_EXTENSIONS
+
     assert SUPPORTED_EXTENSIONS == {".pdf", ".docx", ".xlsx", ".xlsm"}
 
 
