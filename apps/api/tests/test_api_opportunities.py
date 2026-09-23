@@ -9,18 +9,37 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
+from uuid import UUID
 
 from fastapi.testclient import TestClient
 
+from app.auth.principal import Principal, Role, get_current_principal
 from app.config import Settings
 from app.db.repository import InMemoryOpportunityRepository
 from app.db.sync_service import SyncService
 from app.main import create_app
 from app.secop.client import PROCESSES_DATASET, QuotaExceededError
+from app.secop.sources import SECOP_II
 from tests.test_sync_repository import make_record
+
+# Identidad sintética. Las rutas de negocio exigen un principal resuelto; en las
+# pruebas se sustituye la dependencia en lugar de emitir un token real, porque
+# lo que se prueba aquí es la ruta, no el servicio de autenticación —que tiene
+# sus propias pruebas en test_auth.py.
+ANALYST = Principal(
+    subject_id=UUID("00000000-0000-0000-0000-000000000001"),
+    organization_id=UUID("00000000-0000-0000-0000-000000000002"),
+    role=Role.ANALYST,
+    user_id=1,
+)
 
 
 class FakeClient:
+    """Cliente sintético. Declara `source` como el cliente real: el servicio de
+    sincronización toma el conjunto de ahí para que no puedan divergir."""
+
+    source = SECOP_II
+
     def __init__(self, pages: list[list[Any]] | Exception) -> None:
         self._pages = pages
         self.requests_made = 0
@@ -49,34 +68,56 @@ class FakeClient:
 def client_with(
     pages: list[list[Any]] | Exception,
     repository: InMemoryOpportunityRepository | None = None,
+    *,
+    authenticated: bool = True,
 ) -> tuple[TestClient, InMemoryOpportunityRepository]:
-    """Construye la aplicación con persistencia y cliente sintéticos."""
+    """Construye la aplicación con persistencia y cliente sintéticos.
+
+    Con `authenticated=False` no se sustituye la dependencia de identidad, de
+    modo que la petición llega sin credenciales y se puede comprobar que la
+    ruta la rechaza.
+    """
 
     app = create_app(Settings(environment="test", app_version="test"))
     repo = repository or InMemoryOpportunityRepository()
     app.state.opportunity_repository = repo
-    app.state.sync_service_factory = lambda: SyncService(
+    app.state.sync_service_factory = lambda dataset=None: SyncService(
         client=FakeClient(pages),  # type: ignore[arg-type]
         repository=repo,
     )
+    if authenticated:
+        app.dependency_overrides[get_current_principal] = lambda: ANALYST
     return TestClient(app), repo
 
 
-# --- Autenticación pendiente ----------------------------------------------
+# --- Autenticación exigida -------------------------------------------------
 
 
-def test_routes_are_reachable_without_authentication_for_now() -> None:
-    """Deja constancia de que las rutas de negocio aún no están protegidas.
+def test_routes_reject_requests_without_credentials() -> None:
+    """Las rutas de negocio no son públicas.
 
-    La autenticación existe en el PR #19 y no se ha fusionado. Esta prueba fija
-    el estado actual a propósito: cuando la protección se integre, debe fallar y
-    obligar a actualizarla, en lugar de que la ausencia de autorización pase
-    inadvertida.
+    Antes lo eran, y una prueba fijaba ese estado a propósito para que, al
+    integrar la protección, fallara y obligara a actualizarla. Esto es esa
+    actualización: ahora se comprueba lo contrario.
     """
 
-    client, _ = client_with([[make_record("A")]])
+    client, _ = client_with([[make_record("A")]], authenticated=False)
 
-    assert client.get("/api/v1/opportunities").status_code == 200
+    assert client.get("/api/v1/opportunities").status_code == 401
+    assert client.post("/api/v1/sync-runs").status_code == 401
+    assert client.get("/api/v1/sources").status_code == 401
+
+
+def test_routes_reject_an_invalid_scheme() -> None:
+    """Un esquema que no sea Bearer no se acepta."""
+
+    client, _ = client_with([[]], authenticated=False)
+
+    response = client.get(
+        "/api/v1/opportunities", headers={"Authorization": "Basic dXNlcjpwYXNz"}
+    )
+
+    assert response.status_code == 401
 
 
 # --- Listado ---------------------------------------------------------------
@@ -245,15 +286,22 @@ def test_sync_endpoint_rejects_invalid_limit() -> None:
 
 
 def test_routes_report_503_when_persistence_is_missing() -> None:
-    """Sin persistencia configurada debe responder 503, no fallar sin más."""
+    """Sin persistencia configurada debe responder 503, no fallar sin más.
+
+    Se autentica la petición para que el 503 provenga de la falta de
+    persistencia y no de la falta de credenciales: si no, la prueba pasaría por
+    el motivo equivocado y ocultaría una regresión.
+    """
 
     app = create_app(Settings(environment="test"))
     app.state.opportunity_repository = None
     app.state.sync_service_factory = None
+    app.dependency_overrides[get_current_principal] = lambda: ANALYST
 
     with TestClient(app) as client:
         assert client.get("/api/v1/opportunities").status_code == 503
         assert client.post("/api/v1/sync-runs").status_code == 503
+        assert client.get("/api/v1/sources").status_code == 503
 
 
 def test_health_declares_the_persistence_mode() -> None:

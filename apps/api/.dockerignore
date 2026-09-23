@@ -1,0 +1,29 @@
+# Contexto de construcción de la API.
+#
+# `.venv` es lo más importante de excluir: un entorno virtual con Tesseract,
+# LangGraph y compañía pesa cientos de megabytes, y además contiene binarios
+# del sistema anfitrión que no sirven dentro de la imagen Linux de destino.
+.venv/
+venv/
+
+# Cachés de herramientas: no aportan nada y cambian en cada ejecución, lo que
+# invalidaría la caché de capas de Docker sin motivo.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Las pruebas no van a la imagen de producción: se ejecutan en CI, donde sí
+# están el código y las dependencias de desarrollo.
+tests/
+
+# Entornos locales y secretos.
+.env
+.env.*
+!.env.example
+
+*.log
+.DS_Store

@@ -14,13 +14,15 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Protocol
+from decimal import Decimal
+from typing import Any, Protocol
 
-from sqlalchemy import select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.models import Opportunity, SyncCursor, SyncRun, utcnow
 from app.secop.client import OpportunityRecord
+from app.secop.sources import grouping_key
 
 
 @dataclass
@@ -49,6 +51,10 @@ SYNCED_FIELDS = (
     "published_at",
     "last_updated_at",
     "official_url",
+    "platform",
+    "entity_nit",
+    "amount",
+    "group_key",
     "raw_payload",
 )
 
@@ -63,8 +69,118 @@ def _values_from(record: OpportunityRecord) -> dict[str, object]:
         "published_at": record.published_at,
         "last_updated_at": record.last_updated_at,
         "official_url": record.official_url,
+        "platform": record.platform,
+        "entity_nit": record.entity_nit,
+        # Dinero en NUMERIC, no en coma flotante: el redondeo binario no debe
+        # decidir la comparación de dos valores económicos.
+        "amount": Decimal(str(record.amount)) if record.amount is not None else None,
+        "group_key": grouping_key(record.entity_nit, record.reference),
         "raw_payload": dict(record.raw),
     }
+
+
+@dataclass(frozen=True)
+class OpportunityFilters:
+    """Filtros del listado.
+
+    Todos son opcionales y `None` significa «no filtrar», nunca «igual a
+    vacío». Un valor desconocido no debe convertirse en un filtro por cadena
+    vacía, porque eso devolvería un subconjunto silenciosamente equivocado.
+    """
+
+    source_dataset: str | None = None
+    platform: str | None = None
+    entity_nit: str | None = None
+    status: str | None = None
+    modality: str | None = None
+    published_from: datetime | None = None
+    published_to: datetime | None = None
+    # Búsqueda libre sobre referencia, título y entidad.
+    search: str | None = None
+
+    @property
+    def is_empty(self) -> bool:
+        return all(
+            value is None
+            for value in (
+                self.source_dataset,
+                self.platform,
+                self.entity_nit,
+                self.status,
+                self.modality,
+                self.published_from,
+                self.published_to,
+                self.search,
+            )
+        )
+
+
+def _matches(item: Opportunity, filters: OpportunityFilters) -> bool:
+    """Predicado de filtrado para el repositorio en memoria.
+
+    Reproduce el mismo criterio que la consulta SQL: si los dos divergieran,
+    las pruebas en memoria aprobarían un comportamiento que en producción no
+    ocurre.
+    """
+
+    if filters.source_dataset and item.source_dataset != filters.source_dataset:
+        return False
+    if filters.platform and item.platform != filters.platform:
+        return False
+    if filters.entity_nit and item.entity_nit != filters.entity_nit:
+        return False
+    if filters.status and item.status != filters.status:
+        return False
+    if filters.modality and item.modality != filters.modality:
+        return False
+    if filters.published_from and (
+        item.published_at is None or item.published_at < filters.published_from
+    ):
+        return False
+    if filters.published_to and (
+        item.published_at is None or item.published_at > filters.published_to
+    ):
+        return False
+    if filters.search:
+        needle = filters.search.strip().lower()
+        if needle:
+            haystack = " ".join(
+                value.lower()
+                for value in (item.reference, item.title, item.entity)
+                if isinstance(value, str)
+            )
+            if needle not in haystack:
+                return False
+    return True
+
+
+def _apply_sql_filters(statement: Select[Any], filters: OpportunityFilters) -> Select[Any]:
+    if filters.source_dataset:
+        statement = statement.where(Opportunity.source_dataset == filters.source_dataset)
+    if filters.platform:
+        statement = statement.where(Opportunity.platform == filters.platform)
+    if filters.entity_nit:
+        statement = statement.where(Opportunity.entity_nit == filters.entity_nit)
+    if filters.status:
+        statement = statement.where(Opportunity.status == filters.status)
+    if filters.modality:
+        statement = statement.where(Opportunity.modality == filters.modality)
+    if filters.published_from:
+        statement = statement.where(Opportunity.published_at >= filters.published_from)
+    if filters.published_to:
+        statement = statement.where(Opportunity.published_at <= filters.published_to)
+    if filters.search and filters.search.strip():
+        # `ilike` y no `like`: en este dominio la caja del texto que escribe el
+        # analista no debe decidir si encuentra una entidad.
+        pattern = f"%{filters.search.strip()}%"
+        statement = statement.where(
+            or_(
+                Opportunity.reference.ilike(pattern),
+                Opportunity.title.ilike(pattern),
+                Opportunity.entity.ilike(pattern),
+            )
+        )
+    return statement
 
 
 def _has_changed(existing: Opportunity, values: dict[str, object]) -> bool:
@@ -93,6 +209,16 @@ class OpportunityRepository(Protocol):
     def get_by_id(self, opportunity_id: int) -> Opportunity | None: ...
 
     def list_recent(self, *, limit: int, offset: int) -> Sequence[Opportunity]: ...
+
+    def list_filtered(
+        self, *, filters: OpportunityFilters, limit: int, offset: int
+    ) -> Sequence[Opportunity]: ...
+
+    def count_filtered(self, filters: OpportunityFilters) -> int: ...
+
+    def source_counts(self) -> Sequence[tuple[str, str, int]]: ...
+
+    def platforms_by_group(self, keys: Sequence[str]) -> dict[str, set[str]]: ...
 
 
 class SqlOpportunityRepository:
@@ -175,6 +301,74 @@ class SqlOpportunityRepository:
         )
         return list(self._session.execute(statement).scalars().all())
 
+    def list_filtered(
+        self, *, filters: OpportunityFilters, limit: int, offset: int
+    ) -> Sequence[Opportunity]:
+        """Listado con filtros, del más reciente al más antiguo.
+
+        Se conserva el orden de `list_recent`, incluidas las filas sin fecha al
+        final: mostrarlas primero daría a entender que son lo más reciente.
+        """
+
+        statement = _apply_sql_filters(select(Opportunity), filters)
+        statement = (
+            statement.order_by(
+                Opportunity.published_at.desc().nullslast(),
+                Opportunity.id.desc(),
+            )
+            .limit(limit)
+            .offset(offset)
+        )
+        return list(self._session.execute(statement).scalars().all())
+
+    def count_filtered(self, filters: OpportunityFilters) -> int:
+        statement = _apply_sql_filters(
+            select(func.count()).select_from(Opportunity), filters
+        )
+        return int(self._session.execute(statement).scalar_one())
+
+    def source_counts(self) -> Sequence[tuple[str, str, int]]:
+        """Cuántas oportunidades hay por conjunto y plataforma.
+
+        La interfaz lo necesita para declarar cobertura con datos en lugar de
+        con una afirmación fija en el código.
+        """
+
+        statement = (
+            select(
+                Opportunity.source_dataset,
+                Opportunity.platform,
+                func.count(Opportunity.id),
+            )
+            .group_by(Opportunity.source_dataset, Opportunity.platform)
+            .order_by(func.count(Opportunity.id).desc())
+        )
+        return [
+            (dataset, platform, int(total))
+            for dataset, platform, total in self._session.execute(statement).all()
+        ]
+
+    def platforms_by_group(self, keys: Sequence[str]) -> dict[str, set[str]]:
+        """Plataformas presentes en cada grupo, para señalar posibles duplicados.
+
+        Solo se consultan las claves de la página que se está mostrando: hacerlo
+        sobre toda la tabla crecería sin límite.
+        """
+
+        wanted = [key for key in keys if key]
+        if not wanted:
+            return {}
+        statement = (
+            select(Opportunity.group_key, Opportunity.platform)
+            .where(Opportunity.group_key.in_(wanted))
+            .distinct()
+        )
+        grouped: dict[str, set[str]] = {}
+        for key, platform in self._session.execute(statement).all():
+            if key:
+                grouped.setdefault(key, set()).add(platform)
+        return grouped
+
 
 class InMemoryOpportunityRepository:
     """Implementación sin base de datos, para pruebas y desarrollo local.
@@ -254,6 +448,56 @@ class InMemoryOpportunityRepository:
             reverse=True,
         )
         return (con_fecha + sin_fecha)[offset : offset + limit]
+
+    def _ordered(self, filters: OpportunityFilters) -> list[Opportunity]:
+        con_fecha = sorted(
+            (
+                o
+                for o in self._items.values()
+                if o.published_at is not None and _matches(o, filters)
+            ),
+            key=lambda o: (o.published_at, o.id),
+            reverse=True,
+        )
+        sin_fecha = sorted(
+            (
+                o
+                for o in self._items.values()
+                if o.published_at is None and _matches(o, filters)
+            ),
+            key=lambda o: o.id,
+            reverse=True,
+        )
+        return con_fecha + sin_fecha
+
+    def list_filtered(
+        self, *, filters: OpportunityFilters, limit: int, offset: int
+    ) -> Sequence[Opportunity]:
+        return self._ordered(filters)[offset : offset + limit]
+
+    def count_filtered(self, filters: OpportunityFilters) -> int:
+        return len(self._ordered(filters))
+
+    def source_counts(self) -> Sequence[tuple[str, str, int]]:
+        counts: dict[tuple[str, str], int] = {}
+        for item in self._items.values():
+            key = (item.source_dataset, item.platform)
+            counts[key] = counts.get(key, 0) + 1
+        return sorted(
+            ((dataset, platform, total) for (dataset, platform), total in counts.items()),
+            key=lambda row: row[2],
+            reverse=True,
+        )
+
+    def platforms_by_group(self, keys: Sequence[str]) -> dict[str, set[str]]:
+        wanted = {key for key in keys if key}
+        if not wanted:
+            return {}
+        grouped: dict[str, set[str]] = {}
+        for item in self._items.values():
+            if item.group_key in wanted:
+                grouped.setdefault(item.group_key, set()).add(item.platform)
+        return grouped
 
 
 @dataclass

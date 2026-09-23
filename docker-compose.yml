@@ -1,0 +1,143 @@
+# Stack completo del sistema EAG de licitaciones: base de datos propia,
+# API y web. Sin Supabase y sin dependencias de servicios administrados.
+#
+# Aislamiento deliberado. Este proyecto no comparte nombres de contenedor,
+# red, volumen ni puerto con ningún otro stack de la máquina:
+#
+#   proyecto   eag-app
+#   red        eag-app-net
+#   volumen    eag-app-db-data
+#   puertos    5446 (db) · 8132 (api) · 8082 (web)
+#
+# Nada aquí detiene, elimina ni reconfigura contenedores de otros proyectos.
+# Para levantar y bajar SOLO este stack, sin tocar el resto:
+#
+#   cp .env.example .env        # y definir POSTGRES_PASSWORD y EAG_JWT_SECRET
+#   docker compose up -d --build
+#   docker compose ps
+#
+# La API aplica las migraciones al arrancar. Para crear el primer administrador:
+#
+#   docker compose exec api python -m scripts.crear_admin \
+#     --email analista@eag.example --password '...' --role administrador
+
+name: eag-app
+
+services:
+  db:
+    # pgvector es obligatorio: la migración 20260918000003 crea la extensión
+    # `vector` y un índice HNSW para la base de conocimiento. Con la imagen
+    # `postgres` a secas esa migración falla y el RAG no arranca.
+    image: pgvector/pgvector:pg17
+    container_name: eag-app-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-eag}
+      POSTGRES_USER: ${POSTGRES_USER:-eag}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD en .env}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    ports:
+      # Publicado solo para inspección con psql durante el desarrollo. La API
+      # se conecta por la red interna, no por este puerto.
+      - "${POSTGRES_PORT:-5446}:5432"
+    volumes:
+      - eag-app-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-eag} -d ${POSTGRES_DB:-eag}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks: [eag-app-net]
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: eag-app-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      EAG_ENVIRONMENT: ${EAG_ENVIRONMENT:-development}
+      EAG_APP_VERSION: ${EAG_APP_VERSION:-0.1.0}
+      EAG_DATABASE_URL: postgresql://${POSTGRES_USER:-eag}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-eag}
+      # Obligatorio: la API se niega a arrancar sin secreto de firma, porque
+      # arrancar con uno por defecto permitiría emitir tokens válidos a
+      # cualquiera que leyera el código.
+      EAG_JWT_SECRET: ${EAG_JWT_SECRET:?defina EAG_JWT_SECRET en .env}
+      # La web se sirve por el mismo origen a través de nginx, así que en el
+      # stack completo CORS no es necesario. Se deja configurable para poder
+      # apuntar un Vite de desarrollo contra esta API.
+      EAG_CORS_ALLOWED_ORIGINS: ${EAG_CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      # --- Sincronización de fuentes SECOP ---
+      EAG_SECOP_PAGE_SIZE: ${EAG_SECOP_PAGE_SIZE:-100}
+      EAG_SECOP_TIMEOUT_SECONDS: ${EAG_SECOP_TIMEOUT_SECONDS:-20}
+      EAG_SECOP_MAX_RETRIES: ${EAG_SECOP_MAX_RETRIES:-2}
+      EAG_SECOP_MAX_REQUESTS: ${EAG_SECOP_MAX_REQUESTS:-50}
+      # Token opcional de Socrata. El prefijo es obligatorio: la configuración
+      # se lee con env_prefix EAG_. Sin él, la variable se ignora en silencio.
+      EAG_SOCRATA_APP_TOKEN: ${EAG_SOCRATA_APP_TOKEN:-}
+      # Sin proveedor de representaciones se usa el representador local, que
+      # no entiende de significado. El modo se declara en /api/health.
+      EAG_EMBEDDINGS_BASE_URL: ${EAG_EMBEDDINGS_BASE_URL:-}
+      EAG_EMBEDDINGS_API_KEY: ${EAG_EMBEDDINGS_API_KEY:-}
+      EAG_EMBEDDINGS_MODEL: ${EAG_EMBEDDINGS_MODEL:-}
+      # Antivirus opcional. Vacío significa que los archivos se aceptan sin
+      # analizar, y así se declara; no se finge un análisis que no ocurrió.
+      EAG_CLAMAV_HOST: ${EAG_CLAMAV_HOST:-}
+      EAG_CLAMAV_PORT: ${EAG_CLAMAV_PORT:-3310}
+      EAG_REQUIRE_ANTIVIRUS: ${EAG_REQUIRE_ANTIVIRUS:-false}
+    # Las migraciones se aplican antes de servir tráfico. Si fallan, el
+    # contenedor no arranca: es preferible a servir una API contra un esquema
+    # incompleto que respondería con errores opacos.
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        echo "Aplicando migraciones..."
+        python -m alembic upgrade head
+        echo "Migraciones al día. Arrancando API."
+        exec python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers
+    ports:
+      - "${API_PORT:-8132}:8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).status==200 else 1)"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    networks: [eag-app-net]
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: eag-app-web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+    ports:
+      - "${WEB_PORT:-8082}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks: [eag-app-net]
+
+volumes:
+  eag-app-db-data:
+    name: eag-app-db-data
+
+networks:
+  eag-app-net:
+    name: eag-app-net

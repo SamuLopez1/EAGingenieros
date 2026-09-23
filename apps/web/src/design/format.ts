@@ -38,6 +38,28 @@ export function isUnknown(value: string | null | undefined): boolean {
   return !value || !value.trim();
 }
 
+/**
+ * Formatea un valor económico, o devuelve el marcador de desconocido.
+ *
+ * `null` es «no consta», no cero. Un cero real se muestra como cero, porque
+ * en este dominio un proceso puede valer cero y afirmar que no consta sería
+ * igual de equivocado que lo contrario.
+ *
+ * El formato es de pesos colombianos, sin decimales: las cuantías de estos
+ * conjuntos se publican en pesos enteros y mostrar céntimos daría una
+ * precisión que la fuente no tiene.
+ */
+export function formatAmount(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return UNKNOWN;
+  }
+  return new Intl.NumberFormat("es-CO", {
+    style: "currency",
+    currency: "COP",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
 /** Fecha relativa en días, para señalar datos desactualizados. */
 export function daysSince(value: string | null | undefined): number | null {
   if (!value) return null;

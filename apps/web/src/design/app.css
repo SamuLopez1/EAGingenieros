@@ -355,3 +355,563 @@ td.is-unknown {
     max-width: 30ch;
   }
 }
+
+/* =========================================================================
+ * Navegación y sesión
+ * ====================================================================== */
+
+.top-nav {
+  display: flex;
+  gap: var(--s-lg);
+  margin-right: auto;
+  margin-left: var(--s-xl);
+  font-size: 14px;
+}
+
+.top-nav a {
+  color: var(--ink-2);
+  text-decoration: none;
+  padding: 4px 0;
+  border-bottom: 2px solid transparent;
+}
+
+.top-nav a:hover {
+  color: var(--ink);
+}
+
+/* La sección activa se marca con el acento interactivo, que es la única
+ * función que el índigo cumple en este sistema. */
+.top-nav a.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+.who {
+  display: flex;
+  align-items: center;
+  gap: var(--s-sm);
+  font-size: 13px;
+  color: var(--ink-2);
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.who-role {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--mute);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-pill);
+  padding: 1px 7px;
+}
+
+/* =========================================================================
+ * Acceso
+ * ====================================================================== */
+
+.auth {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--s-xxl) var(--s-lg);
+  background: var(--canvas-soft);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 24rem;
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  padding: var(--s-xxl);
+  box-shadow: var(--shadow-1);
+}
+
+.auth-brand {
+  margin-bottom: var(--s-xl);
+}
+
+.auth-title {
+  font-size: 26px;
+  margin: 0 0 var(--s-sm);
+  letter-spacing: -0.26px;
+}
+
+.auth-lead {
+  margin: 0 0 var(--s-xl);
+  color: var(--mute);
+  font-size: 14px;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-lg);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-2);
+  letter-spacing: 0.2px;
+}
+
+.field input {
+  height: 38px;
+  padding: 0 var(--s-md);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 300;
+  color: var(--ink);
+  background: var(--canvas);
+  border: 1px solid var(--hairline-input);
+  border-radius: var(--r-sm);
+}
+
+.field input:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+  border-color: var(--primary);
+}
+
+/* El error de acceso usa la familia de incumplimiento, no la de conflicto:
+ * unas credenciales incorrectas no son una contradicción entre fuentes. */
+.auth-error {
+  margin: 0;
+  padding: var(--s-sm) var(--s-md);
+  font-size: 13px;
+  color: var(--state-unmet);
+  background: var(--state-unmet-bg);
+  border: 1px solid var(--state-unmet-line);
+  border-radius: var(--r-md);
+}
+
+.auth-submit {
+  justify-content: center;
+  height: 38px;
+}
+
+.auth-note {
+  margin: var(--s-xl) 0 0;
+  font-size: 12px;
+  color: var(--mute);
+}
+
+/* =========================================================================
+ * Filtros
+ * ====================================================================== */
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--s-md);
+  padding: var(--s-lg);
+  margin-bottom: var(--s-lg);
+  background: var(--canvas-soft);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+}
+
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 8.5rem;
+}
+
+.filter-grow {
+  flex: 1 1 16rem;
+}
+
+.filter-field label {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--mute);
+}
+
+.filter-field input,
+.filter-field select {
+  height: 34px;
+  padding: 0 var(--s-sm);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 300;
+  color: var(--ink);
+  background: var(--canvas);
+  border: 1px solid var(--hairline-input);
+  border-radius: var(--r-sm);
+}
+
+.filter-field input:focus-visible,
+.filter-field select:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+  border-color: var(--primary);
+}
+
+.filter-actions {
+  margin-left: auto;
+}
+
+/* =========================================================================
+ * Procedencia
+ * ====================================================================== */
+
+.source-badge {
+  display: inline-block;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  white-space: nowrap;
+}
+
+/* Las dos plataformas se distinguen por tinte dentro de la misma familia
+ * neutra. Ninguna usa los colores de veredicto: si SECOP II fuera verde, un
+ * «cumple» dejaría de ser reconocible de un vistazo. */
+.source-secop-ii {
+  color: var(--ink);
+  background: var(--canvas-soft);
+  border: 1px solid var(--hairline);
+}
+
+.source-secop-i {
+  color: var(--ink-2);
+  background: var(--cream);
+  border: 1px solid var(--hairline);
+}
+
+/* Señal de posible duplicado. Ámbar, no rojo: no es un error ni un
+ * incumplimiento, es algo que hay que comprobar. */
+.dup-flag {
+  display: inline-block;
+  margin-top: 5px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--state-partial);
+  background: var(--state-partial-bg);
+  border: 1px solid var(--state-partial-line);
+  border-radius: var(--r-pill);
+  padding: 1px 8px;
+}
+
+.dup-platforms {
+  color: var(--state-partial);
+  opacity: 0.85;
+}
+
+.cell-source {
+  width: 1%;
+  white-space: nowrap;
+}
+
+/* El enlace cubre entidad y título para que el destino ocupe el área que el
+ * analista ya señala con la vista, sin hacer pulsable toda la fila. */
+.cell-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.cell-link:hover .cell-entity,
+.cell-link:focus-visible .cell-entity {
+  color: var(--primary);
+  text-decoration: underline;
+}
+
+.cell-link:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
+
+/* Columna numérica: alineada a la derecha para que los importes se comparen
+ * por su cifra más significativa. */
+th.num,
+td.num {
+  text-align: right;
+}
+
+/* =========================================================================
+ * Cobertura declarada
+ * ====================================================================== */
+
+.coverage {
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  padding: var(--s-lg);
+  margin-bottom: var(--s-lg);
+  background: var(--canvas);
+}
+
+.coverage-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-md);
+  margin-bottom: var(--s-md);
+}
+
+.coverage-title {
+  font-size: 13px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ink-2);
+  margin: 0;
+}
+
+.coverage-warn {
+  font-size: 12px;
+  color: var(--state-partial);
+}
+
+.coverage-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--s-sm);
+}
+
+.coverage-item {
+  display: grid;
+  grid-template-columns: 7rem 9rem 6rem 1fr;
+  align-items: baseline;
+  gap: var(--s-md);
+  font-size: 13px;
+}
+
+.coverage-platform {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.coverage-state {
+  font-size: 11px;
+  color: var(--state-met);
+}
+
+.coverage-state.is-warn {
+  color: var(--state-partial);
+}
+
+.coverage-count {
+  color: var(--ink-2);
+}
+
+.coverage-note {
+  color: var(--mute);
+  font-size: 12px;
+}
+
+.coverage-footnote {
+  margin: var(--s-md) 0 0;
+  font-size: 12px;
+  color: var(--mute);
+  border-top: 1px solid var(--hairline);
+  padding-top: var(--s-md);
+}
+
+/* =========================================================================
+ * Detalle
+ * ====================================================================== */
+
+.detail-actions {
+  display: flex;
+  gap: var(--s-sm);
+  margin: var(--s-lg) 0;
+}
+
+.detail-provenance {
+  display: flex;
+  align-items: center;
+  gap: var(--s-sm);
+  flex-wrap: wrap;
+  margin-bottom: var(--s-sm);
+}
+
+.detail-dataset {
+  font-size: 12px;
+  color: var(--mute);
+}
+
+.detail-title {
+  font-size: 26px;
+  line-height: 1.15;
+  margin: 0 0 var(--s-sm);
+  letter-spacing: -0.26px;
+  max-width: 60ch;
+}
+
+.detail-panel {
+  margin-top: var(--s-lg);
+}
+
+.detail-section {
+  font-size: 13px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ink-2);
+  margin: 0 0 var(--s-md);
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: var(--s-md) var(--s-xl);
+  margin: 0;
+}
+
+.detail-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: var(--s-sm);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.detail-field dt {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--mute);
+}
+
+.detail-field dd {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink);
+  word-break: break-word;
+}
+
+.detail-note {
+  margin: 0 0 var(--s-sm);
+  font-size: 13px;
+  color: var(--mute);
+  max-width: 78ch;
+}
+
+.detail-note code {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--canvas-soft);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-xs);
+  padding: 1px 5px;
+}
+
+/* =========================================================================
+ * Fuentes
+ * ====================================================================== */
+
+.source-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: var(--s-lg);
+}
+
+.source-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-sm);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  padding: var(--s-lg);
+  background: var(--canvas);
+}
+
+.source-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-sm);
+  font-size: 15px;
+}
+
+.source-card-label {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.source-card-note {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--mute);
+}
+
+.source-card-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-sm);
+  font-size: 13px;
+  color: var(--ink);
+  padding: var(--s-sm) 0;
+  border-top: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.source-dataset {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--mute);
+}
+
+.source-card-quirk {
+  color: var(--state-partial);
+}
+
+.source-card .btn {
+  align-self: flex-start;
+  margin-top: auto;
+}
+
+.run-outcome {
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.run-outcome.is-ok {
+  color: var(--state-met);
+}
+
+.run-outcome.is-bad {
+  color: var(--state-unmet);
+}
+
+@media (max-width: 900px) {
+  .coverage-item {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .top-nav {
+    margin-left: var(--s-md);
+  }
+
+  .who {
+    display: none;
+  }
+}
+

@@ -28,13 +28,13 @@ from app.db.repository import (
     UpsertResult,
 )
 from app.secop.client import (
-    PROCESSES_DATASET,
     OpportunityRecord,
     QuotaExceededError,
     SecopClient,
     SecopError,
     deduplicate,
 )
+from app.secop.sources import Source
 
 
 @dataclass
@@ -48,7 +48,7 @@ class SyncRequest:
 
 
 class SyncService:
-    """Ejecuta la sincronización manual o programada."""
+    """Ejecuta la sincronización manual o programada de una fuente."""
 
     def __init__(
         self,
@@ -56,16 +56,36 @@ class SyncService:
         client: SecopClient,
         repository: OpportunityRepository,
         tracker: SyncRunTracker | None = None,
-        dataset: str = PROCESSES_DATASET,
+        dataset: str | None = None,
         session: Session | None = None,
     ) -> None:
         self._client = client
         self._repository = repository
         self._tracker = tracker
-        self._dataset = dataset
+        # El conjunto se toma del cliente, que a su vez lo toma del registro de
+        # fuentes. Antes llegaba como parámetro independiente y podía divergir:
+        # se habría registrado la ejecución bajo un conjunto mientras las filas
+        # se escribían desde otro, y el cursor de reanudación habría avanzado
+        # sobre la fuente equivocada.
+        self._source = client.source
+        if dataset is not None and dataset != self._source.dataset:
+            raise ValueError(
+                f"el conjunto {dataset!r} no coincide con el del cliente "
+                f"({self._source.dataset!r}); la ejecución se registraría bajo "
+                "una fuente distinta de la que produce las filas"
+            )
+        self._dataset = self._source.dataset
         # Solo se usa para consultar el historial de ejecuciones. La escritura
         # de oportunidades pasa siempre por el repositorio.
         self._session = session
+
+    @property
+    def source(self) -> Source:
+        return self._source
+
+    @property
+    def dataset(self) -> str:
+        return self._dataset
 
     def _start_offset(self, request: SyncRequest) -> int:
         if not request.resume or self._tracker is None:

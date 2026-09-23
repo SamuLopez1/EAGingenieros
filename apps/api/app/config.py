@@ -100,6 +100,35 @@ class Settings(BaseSettings):
                 )
         return origins
 
+    @field_validator(
+        "database_url",
+        "socrata_app_token",
+        "jwt_secret",
+        "embeddings_base_url",
+        "embeddings_api_key",
+        "embeddings_model",
+        "clamav_host",
+        mode="before",
+    )
+    @classmethod
+    def empty_means_unset(cls, value: object) -> object:
+        """Una variable de entorno vacía significa «no configurado», no un error.
+
+        Ni Docker Compose ni un archivo `.env` tienen una forma cómoda de omitir
+        una variable, así que la convención es dejarla vacía. Sin esta
+        conversión, `EAG_EMBEDDINGS_BASE_URL=` hacía fallar el arranque entero
+        con un `url_parsing` de pydantic: un fallo de configuración disfrazado
+        de error de datos, y en un contenedor, un bucle de reinicio.
+
+        Se aplica solo a los campos opcionales. Un valor vacío en un campo
+        obligatorio —como `EAG_ENVIRONMENT`— sigue siendo un error, porque ahí
+        el vacío no expresa ausencia sino una configuración equivocada.
+        """
+
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
     def require_jwt_secret(self) -> str:
         if self.jwt_secret is None or not self.jwt_secret.get_secret_value():
             raise RuntimeError(

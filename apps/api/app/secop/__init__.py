@@ -1,6 +1,7 @@
-"""Cliente del conjunto público de procesos de SECOP II."""
+"""Consulta de las fuentes públicas de contratación (SECOP I y SECOP II)."""
 
 from app.secop.client import (
+    CONFIRMED_FIELDS,
     DEFAULT_ORDER,
     PROCESSES_DATASET,
     InvalidFilterError,
@@ -11,23 +12,52 @@ from app.secop.client import (
     SecopError,
     SyncPage,
     UpstreamUnavailableError,
+    coerce_amount,
     deduplicate,
+    normalise_nit,
     normalise_record,
     parse_timestamp,
 )
+from app.secop.sources import (
+    DEFAULT_SOURCE,
+    SECOP_I,
+    SECOP_II,
+    SOURCES,
+    FieldMap,
+    Source,
+    UnknownSourceError,
+    coverage_summary,
+    get_platform,
+    get_source,
+    primary_sources,
+)
 
 __all__ = [
+    "CONFIRMED_FIELDS",
     "DEFAULT_ORDER",
+    "DEFAULT_SOURCE",
     "PROCESSES_DATASET",
+    "SECOP_I",
+    "SECOP_II",
+    "SOURCES",
+    "FieldMap",
     "InvalidFilterError",
     "OpportunityRecord",
     "QuotaExceededError",
     "ResponseShapeError",
     "SecopClient",
     "SecopError",
+    "Source",
     "SyncPage",
+    "UnknownSourceError",
     "UpstreamUnavailableError",
+    "coerce_amount",
+    "coverage_summary",
     "deduplicate",
+    "get_platform",
+    "get_source",
+    "normalise_nit",
     "normalise_record",
     "parse_timestamp",
+    "primary_sources",
 ]

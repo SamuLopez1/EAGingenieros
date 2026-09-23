@@ -23,10 +23,17 @@ from typing import Any, Protocol
 
 import httpx
 
+from app.secop.sources import DEFAULT_SOURCE, SECOP_II, Source, get_source
+
 # Host oficial. Cualquier URL fuera de este host se rechaza.
 SOCRATA_HOST = "www.datos.gov.co"
 SOCRATA_ROOT = f"https://{SOCRATA_HOST}"
-PROCESSES_DATASET = "p6dx-8zbt"
+
+# Compatibilidad: estos tres nombres eran constantes de módulo cuando solo
+# existía SECOP II. Ahora derivan de la fuente por defecto, de modo que el
+# código y las pruebas anteriores siguen funcionando sin cambios, pero ya no
+# hay una segunda copia del esquema que pueda divergir del registro.
+PROCESSES_DATASET = SECOP_II.dataset
 
 # Un nombre de campo solo puede ser un identificador: nunca se interpola texto
 # libre en el parámetro $where, para no construir consultas inyectables.
@@ -37,22 +44,62 @@ SAFE_FIELD_NAME = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 # con ese campo nulo, que en este conjunto son numerosas. Ordenar por el
 # identificador evita ese sesgo y mantiene un recorrido paginado estable
 # (un orden inestable puede repetir u omitir filas entre páginas).
-DEFAULT_ORDER = "id_del_proceso DESC"
+DEFAULT_ORDER = SECOP_II.order
 
-# Campos que el spike confirmó en el esquema real del conjunto de procesos.
-CONFIRMED_FIELDS = frozenset(
-    {
-        "id_del_proceso",
-        "referencia_del_proceso",
-        "nombre_del_procedimiento",
-        "entidad",
-        "estado_del_procedimiento",
-        "modalidad_de_contratacion",
-        "fecha_de_publicacion_del",
-        "fecha_de_ultima_publicaci",
-        "urlproceso",
-    }
-)
+# Campos confirmados en el esquema real. Se conserva el nombre para las
+# pruebas existentes; la lista autoritativa vive en el registro de fuentes.
+CONFIRMED_FIELDS = SECOP_II.confirmed_fields
+
+
+def coerce_amount(value: object) -> float | None:
+    """Convierte un valor económico, o devuelve None si no es utilizable.
+
+    Un valor ausente o ilegible se representa como desconocido, nunca como 0:
+    en este dominio «no sé cuánto vale» y «vale cero» son cosas distintas, y
+    confundirlas produciría una comparación de precios incorrecta.
+    """
+
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        text = value.strip().replace(" ", "")
+        if not text:
+            return None
+        # Formato colombiano: miles con punto y decimales con coma. Solo se
+        # aplica cuando la cadena no es ya un número parseable, para no
+        # reinterpretar «1.5» como 15.
+        try:
+            return float(text)
+        except ValueError:
+            pass
+        normalised = text.replace(".", "").replace(",", ".") if "," in text else None
+        if normalised is None:
+            return None
+        try:
+            return float(normalised)
+        except ValueError:
+            return None
+    return None
+
+
+class Unset:
+    """Centinela que distingue «no se indicó» de «se indicó None».
+
+    Necesario en `fetch_page(order=...)`: `None` significa «sin orden», que es
+    un comportamiento documentado y probado, mientras que omitir el argumento
+    significa «aplica el orden por defecto de la fuente». Sin esta distinción,
+    desactivar el orden dejaría de ser posible.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:  # pragma: no cover - ayuda de depuración
+        return "UNSET"
+
+
+UNSET = Unset()
 
 
 class SecopError(RuntimeError):
@@ -91,6 +138,22 @@ class OpportunityRecord:
     official_url: str | None
     fetched_at: datetime
     raw: Mapping[str, Any] = field(repr=False)
+
+    # --- Campos añadidos con el soporte multifuente -----------------------
+    # Van después de `raw` y con valor por defecto para no romper las
+    # construcciones posicionales anteriores.
+
+    # NIT de la entidad sin formato (solo dígitos). Es la única columna que
+    # permite comparar entidades entre plataformas: el nombre comercial varía
+    # («CAUCA - ALCALDÍA MUNICIPIO DE TIMBIQUI» frente a «ALCALDIA DE TIMBIQUI»)
+    # mientras que el NIT es el mismo número de 9 dígitos en ambas.
+    entity_nit: str | None = None
+    # Valor económico. La etiqueta depende de la fuente y NO es comparable
+    # entre ellas: `precio_base` y `cuantia_proceso` miden cosas distintas.
+    amount: float | None = None
+    # Plataforma de origen, para que la interfaz pueda declarar la procedencia
+    # sin tener que consultar el registro de fuentes.
+    platform: str = SECOP_II.platform
 
     @property
     def natural_key(self) -> str:
@@ -155,35 +218,87 @@ def _url_from(value: object) -> str | None:
     return None
 
 
-def normalise_record(raw: Mapping[str, Any], *, fetched_at: datetime) -> OpportunityRecord | None:
+def _first_url(raw: Mapping[str, Any], names: tuple[str, ...]) -> str | None:
+    """Primera URL utilizable entre los nombres candidatos."""
+
+    for name in names:
+        found = _url_from(raw.get(name))
+        if found:
+            return found
+    return None
+
+
+def _first_amount(raw: Mapping[str, Any], names: tuple[str, ...]) -> float | None:
+    for name in names:
+        value = coerce_amount(raw.get(name))
+        if value is not None:
+            return value
+    return None
+
+
+def normalise_nit(value: object) -> str | None:
+    """Deja el NIT en dígitos, sin puntos ni guiones.
+
+    Es la única columna que permite reconocer la misma entidad en las dos
+    plataformas: el nombre comercial cambia de una a otra, el NIT no.
+    """
+
+    if not isinstance(value, str):
+        return None
+    digits = re.sub(r"\D", "", value)
+    return digits or None
+
+
+def normalise_record(
+    raw: Mapping[str, Any],
+    *,
+    fetched_at: datetime,
+    source: Source = DEFAULT_SOURCE,
+) -> OpportunityRecord | None:
     """Convierte una fila cruda en un registro normalizado.
 
     Devuelve None cuando falta el identificador de origen: sin él no hay
     sincronización idempotente posible y el registro no debe persistirse
     como si fuera válido.
+
+    Los nombres de campo se resuelven con el mapa de la fuente indicada. Antes
+    estaban escritos dentro de la función con los de SECOP II, así que toda
+    fila de SECOP I se descartaba aquí, en silencio y sin error.
     """
 
-    source_id = _first_str(raw, "id_del_proceso", "referencia_del_proceso")
+    fields = source.fields
+
+    source_id = _first_str(raw, *fields.source_id)
     if source_id is None:
         return None
 
     return OpportunityRecord(
         source_id=source_id,
-        source_dataset=PROCESSES_DATASET,
-        reference=_first_str(raw, "referencia_del_proceso"),
-        title=_first_str(raw, "nombre_del_procedimiento"),
-        entity=_first_str(raw, "entidad"),
-        status=_first_str(raw, "estado_del_procedimiento"),
-        modality=_first_str(raw, "modalidad_de_contratacion"),
+        source_dataset=source.dataset,
+        reference=_first_str(raw, *fields.reference),
+        title=_first_str(raw, *fields.title),
+        entity=_first_str(raw, *fields.entity),
+        status=_first_str(raw, *fields.status),
+        modality=_first_str(raw, *fields.modality),
         # El conjunto publica el nombre completo y, en algunas filas, una
         # variante truncada; se acepta la primera disponible.
         published_at=parse_timestamp(
-            raw.get("fecha_de_publicacion_del") or raw.get("fecha_de_publicacion")
+            raw.get(fields.published_at[0])
+            if fields.published_at
+            else None
+        )
+        or parse_timestamp(
+            next((raw[n] for n in fields.published_at[1:] if raw.get(n)), None)
         ),
-        last_updated_at=parse_timestamp(raw.get("fecha_de_ultima_publicaci")),
-        official_url=_url_from(raw.get("urlproceso")),
+        last_updated_at=parse_timestamp(
+            next((raw[n] for n in fields.last_updated_at if raw.get(n)), None)
+        ),
+        official_url=_first_url(raw, fields.official_url),
         fetched_at=fetched_at,
         raw=dict(raw),
+        entity_nit=normalise_nit(_first_str(raw, *fields.entity_nit)),
+        amount=_first_amount(raw, fields.amount),
+        platform=source.platform,
     )
 
 
@@ -230,7 +345,7 @@ class HttpxClient:
 
 
 class SecopClient:
-    """Consulta paginada del conjunto de procesos, con cuota y reintentos."""
+    """Consulta paginada de un conjunto de procesos, con cuota y reintentos."""
 
     def __init__(
         self,
@@ -240,7 +355,8 @@ class SecopClient:
         timeout: float = 20.0,
         max_retries: int = 2,
         max_requests: int | None = None,
-        dataset: str = PROCESSES_DATASET,
+        source: Source = DEFAULT_SOURCE,
+        dataset: str | None = None,
     ) -> None:
         if page_size < 1:
             raise ValueError("page_size debe ser al menos 1")
@@ -251,22 +367,36 @@ class SecopClient:
         self._timeout = timeout
         self._max_retries = max_retries
         self._max_requests = max_requests
-        self._dataset = dataset
+        # `dataset` se conserva por compatibilidad con las llamadas anteriores.
+        # Cuando llega, se resuelve contra el registro para no perder el mapa de
+        # campos: aceptar un conjunto sin su fuente haría que la normalización
+        # usara el mapa equivocado y descartara todas las filas.
+        self._source = get_source(dataset) if dataset is not None else source
         self._requests_made = 0
+
+    @property
+    def source(self) -> Source:
+        return self._source
+
+    @property
+    def dataset(self) -> str:
+        return self._source.dataset
 
     @property
     def requests_made(self) -> int:
         return self._requests_made
 
     def _endpoint(self) -> str:
-        return f"{SOCRATA_ROOT}/resource/{self._dataset}.json"
+        return f"{SOCRATA_ROOT}/resource/{self._source.dataset}.json"
 
     def build_where(self, filters: Mapping[str, str]) -> str | None:
         """Construye el parámetro $where validando cada nombre de campo.
 
-        Solo se aceptan campos confirmados en el esquema y valores que se
-        pueden citar sin ambigüedad. Un campo no confirmado se rechaza en vez
-        de enviarse a ciegas, porque el conjunto responde con error opaco.
+        Solo se aceptan campos confirmados en el esquema **de esta fuente**, y
+        valores que se pueden citar sin ambigüedad. Un campo no confirmado se
+        rechaza en vez de enviarse a ciegas, porque el conjunto responde con
+        error opaco. La lista es por fuente: `entidad` existe en SECOP II pero
+        no en SECOP I, donde el campo se llama `nombre_entidad`.
         """
 
         if not filters:
@@ -275,8 +405,10 @@ class SecopClient:
         for name, value in filters.items():
             if not SAFE_FIELD_NAME.match(name):
                 raise InvalidFilterError(f"nombre de campo inválido: {name!r}")
-            if name not in CONFIRMED_FIELDS:
-                raise InvalidFilterError(f"campo no confirmado en el esquema: {name!r}")
+            if name not in self._source.confirmed_fields:
+                raise InvalidFilterError(
+                    f"campo no confirmado en {self._source.short_label}: {name!r}"
+                )
             escaped = value.replace("'", "''")
             clauses.append(f"{name}='{escaped}'")
         return " AND ".join(clauses)
@@ -287,17 +419,23 @@ class SecopClient:
         offset: int = 0,
         filters: Mapping[str, str] | None = None,
         page_size: int | None = None,
-        order: str | None = DEFAULT_ORDER,
+        order: str | None | Unset = UNSET,
     ) -> SyncPage:
-        """Obtiene una página. Los reintentos solo cubren fallos transitorios."""
+        """Obtiene una página. Los reintentos solo cubren fallos transitorios.
 
+        `order` distingue tres casos, y por eso usa un centinela en lugar de
+        `None`: no indicado (se aplica el orden de la fuente), `None` explícito
+        (sin orden, como antes) y una cadena (orden concreto).
+        """
+
+        effective_order = self._source.order if order is UNSET else order
         size = page_size or self._page_size
         params: dict[str, Any] = {
             "$limit": size,
             "$offset": offset,
         }
-        if order:
-            params["$order"] = order
+        if effective_order:
+            params["$order"] = effective_order
         where = self.build_where(filters or {})
         if where:
             params["$where"] = where
@@ -343,7 +481,7 @@ class SecopClient:
             for row in payload:
                 if not isinstance(row, Mapping):
                     raise ResponseShapeError("se esperaba un objeto por registro")
-                record = normalise_record(row, fetched_at=fetched_at)
+                record = normalise_record(row, fetched_at=fetched_at, source=self._source)
                 if record is not None:
                     records.append(record)
 

@@ -15,6 +15,66 @@ Repositorio en preparación: contiene el plan de implementación y el backlog, *
 
 Las instrucciones breves para los agentes están en [AGENTS.md](AGENTS.md). Los documentos internos, datos reales, credenciales y entregables académicos locales no forman parte del repositorio.
 
+## Stack completo en Docker (recomendado)
+
+Levanta base de datos, API y web con un comando. **Base de datos propia
+(PostgreSQL + pgvector); no usa Supabase ni ningún servicio administrado.**
+
+```bash
+cp .env.example .env      # y definir POSTGRES_PASSWORD y EAG_JWT_SECRET
+
+# Generar el secreto de firma de sesiones:
+openssl rand -base64 48   # pegar en EAG_JWT_SECRET
+
+docker compose up -d --build
+docker compose ps
+```
+
+| Servicio | Dirección | Contenedor |
+| --- | --- | --- |
+| Web | http://127.0.0.1:8082 | `eag-app-web` |
+| API | http://127.0.0.1:8132/api/health · `/docs` para OpenAPI | `eag-app-api` |
+| PostgreSQL | `127.0.0.1:5446` (solo inspección) | `eag-app-db` |
+
+El proyecto de Compose se llama `eag-app` y no comparte contenedor, red,
+volumen ni puerto con ningún otro stack de la máquina. Aislamiento deliberado:
+`eag-app-net`, `eag-app-db-data`, puertos 5446 / 8132 / 8082.
+
+La API aplica las migraciones de Alembic al arrancar. Si fallan, el contenedor
+no arranca: es preferible a servir una API contra un esquema incompleto.
+
+**Crear el primer administrador.** No hay registro público; las cuentas se crean
+por invitación. Sin una cuenta no se puede entrar, porque todas las rutas de
+negocio exigen sesión:
+
+```bash
+docker compose exec api python -m scripts.crear_admin \
+  --email analista@eag.example --password 'una-contraseña-larga' --role administrador
+```
+
+**Sincronizar las fuentes.** Desde la interfaz, en *Oportunidades* o en
+*Fuentes*. También por HTTP:
+
+```bash
+# SECOP II (fuente principal)
+curl -X POST 'http://127.0.0.1:8132/api/v1/sync-runs?limit=50' \
+  -H "Authorization: Bearer <access_token>"
+
+# SECOP I
+curl -X POST 'http://127.0.0.1:8132/api/v1/sync-runs?dataset=f789-7hwg&limit=50' \
+  -H "Authorization: Bearer <access_token>"
+```
+
+Para detener solo este stack, sin tocar otros: `docker compose down`. Los datos
+permanecen en el volumen `eag-app-db-data`.
+
+### Por qué una sola fuente de rutas
+
+El navegador habla únicamente bajo `/api`. Es el prefijo real de FastAPI
+(`/api/v1/...`, `/api/health`) y lo único que el proxy cubre, en desarrollo
+(Vite) y en el contenedor (nginx). Ninguno de los dos reescribe el prefijo, así
+que desarrollo y despliegue resuelven exactamente las mismas rutas.
+
 ## Estructura base local (MVP-03)
 
 Requisitos comprobados en esta base: Python 3.14 y Node.js 24. No requiere

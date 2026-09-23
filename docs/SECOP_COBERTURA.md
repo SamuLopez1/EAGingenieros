@@ -4,6 +4,27 @@
 > **Pregunta:** ¿aporta SECOP I oportunidades que no estén ya en SECOP II?
 > **Conjuntos:** SECOP I `f789-7hwg` · SECOP II `p6dx-8zbt`
 
+> ## ⚠️ CORRECCIÓN POSTERIOR — la conclusión de este documento no se reproduce
+>
+> Una medición con una muestra mayor (327 referencias de SECOP I de 2026 frente
+> a 377 de SECOP II) **no confirma la cifra de 12 de 12**. Ver
+> [`SECOP_COBERTURA_II.md`](SECOP_COBERTURA_II.md). Resumen:
+>
+> | Medición | Solapamiento SECOP I → SECOP II |
+> | --- | --- |
+> | Este documento (12 referencias) | 100 % |
+> | Muestra de 327 referencias, solo referencia | 22,6 % (cota superior) |
+> | Muestra de 370 pares, (NIT, referencia) | **0 %** |
+>
+> Además, `referencia_del_proceso` **no es única en SECOP II**: el valor
+> `001-2026` aparece 1139 veces. Eso convierte la coincidencia por referencia
+> en un generador de falsos positivos, y explica por qué la cifra alta de este
+> documento no se sostiene.
+>
+> **La conclusión operativa se invierte:** SECOP I sí aporta procesos recientes
+> que no están en SECOP II. El resto de este documento se conserva como
+> registro del trabajo, pero no debe usarse para decidir el alcance.
+
 ## Conclusión
 
 **No de forma significativa para el alcance del MVP.** Los procesos recientes de

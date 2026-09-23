@@ -19,6 +19,7 @@ Decisiones relevantes:
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from sqlalchemy import (
     BigInteger,
@@ -27,6 +28,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -70,6 +72,11 @@ class Opportunity(Base):
         Index("ix_opportunity_published_at", "published_at"),
         Index("ix_opportunity_entity", "entity"),
         Index("ix_opportunity_status", "status"),
+        # Índice sobre la clave de agrupación: la interfaz pregunta «¿hay otra
+        # fila de la otra plataforma en este grupo?» en cada página del listado.
+        Index("ix_opportunity_group_key", "group_key"),
+        Index("ix_opportunity_source_dataset", "source_dataset"),
+        Index("ix_opportunity_entity_nit", "entity_nit"),
     )
 
     id: Mapped[int] = mapped_column(BigIntColumn, primary_key=True, autoincrement=True)
@@ -84,6 +91,33 @@ class Opportunity(Base):
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     official_url: Mapped[str | None] = mapped_column(Text)
+
+    # --- Procedencia y cruce entre fuentes --------------------------------
+    # Plataforma de origen, redundante con `source_dataset` pero explícita:
+    # la interfaz declara procedencia sin tener que resolver el conjunto.
+    platform: Mapped[str] = mapped_column(String(16), nullable=False, default="SECOP_II")
+
+    # NIT de la entidad en dígitos. Es la única columna que permite reconocer
+    # la misma entidad en las dos plataformas: el nombre comercial cambia
+    # («CAUCA - ALCALDÍA MUNICIPIO DE TIMBIQUI» frente a «ALCALDIA DE TIMBIQUI»),
+    # el NIT no.
+    entity_nit: Mapped[str | None] = mapped_column(String(32))
+
+    # Valor económico. La etiqueta depende de la plataforma y los valores NO
+    # son comparables entre ellas: `precio_base` (SECOP II) y `cuantia_proceso`
+    # (SECOP I) miden cosas distintas. Se guarda en NUMERIC y no en coma
+    # flotante porque es dinero: el redondeo binario no debe decidir un empate
+    # entre dos ofertas.
+    amount: Mapped[Decimal | None] = mapped_column(Numeric(20, 2))
+
+    # Clave de agrupación conservadora. NO fusiona filas: solo permite señalar
+    # «esta fila y aquella podrían ser el mismo proceso». Se calcula con el NIT
+    # y la referencia normalizada, y únicamente cuando ambos existen.
+    #
+    # Medición que justifica tanta cautela: `referencia_del_proceso` NO es única
+    # en SECOP II —el valor `001-2026` aparece 1139 veces—, así que agrupar por
+    # referencia sola produciría fusiones falsas entre entidades distintas.
+    group_key: Mapped[str | None] = mapped_column(String(320))
 
     # Carga original de la fuente. Permite auditar y renormalizar sin red.
     raw_payload: Mapped[dict[str, object]] = mapped_column(JsonColumn, nullable=False)

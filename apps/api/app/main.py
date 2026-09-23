@@ -15,11 +15,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.api.analysis_routes import router as analysis_router
-from app.api.auth_routes import router as auth_router
+from app.api import (
+    analysis_router,
+    auth_router,
+    knowledge_router,
+    opportunities_router,
+    profile_data_router,
+    profile_router,
+)
 from app.api.knowledge_routes import MAX_UPLOAD_BYTES
-from app.api.knowledge_routes import router as knowledge_router
-from app.api.routes import router as opportunities_router
 from app.config import Settings
 from app.contracts import HealthResponse
 from app.db.repository import (
@@ -33,7 +37,8 @@ from app.documents import ClamAvScanner
 from app.rag.embeddings import build_embedder
 from app.rag.ingestion import IngestionService
 from app.rag.retriever import Retriever
-from app.secop.client import PROCESSES_DATASET, HttpxClient, SecopClient
+from app.secop.client import HttpxClient, SecopClient
+from app.secop.sources import DEFAULT_SOURCE, get_source
 
 
 def build_persistence(
@@ -81,6 +86,24 @@ def build_persistence(
         def list_recent(self, *, limit: int, offset: int):  # type: ignore[no-untyped-def]
             with session_scope(factory) as session:
                 return self._repo(session).list_recent(limit=limit, offset=offset)
+
+        def list_filtered(self, *, filters, limit: int, offset: int):  # type: ignore[no-untyped-def]
+            with session_scope(factory) as session:
+                return self._repo(session).list_filtered(
+                    filters=filters, limit=limit, offset=offset
+                )
+
+        def count_filtered(self, filters):  # type: ignore[no-untyped-def]
+            with session_scope(factory) as session:
+                return self._repo(session).count_filtered(filters)
+
+        def source_counts(self):  # type: ignore[no-untyped-def]
+            with session_scope(factory) as session:
+                return self._repo(session).source_counts()
+
+        def platforms_by_group(self, keys):  # type: ignore[no-untyped-def]
+            with session_scope(factory) as session:
+                return self._repo(session).platforms_by_group(keys)
 
     return SessionBoundRepository(), factory, engine.dispose
 
@@ -235,13 +258,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.auth_service_factory = make_auth_service if session_factory else None
     app.state.authentication_enabled = active_settings.jwt_secret is not None
 
-    def make_sync_service() -> SyncService:
-        """Crea un servicio de sincronización con recursos propios.
+    def make_sync_service(dataset: str | None = None) -> SyncService:
+        """Crea un servicio de sincronización para una fuente.
 
         El cliente HTTP se abre por ejecución y se cierra al terminar, para no
         mantener conexiones abiertas entre sincronizaciones.
+
+        `dataset` elige la fuente. Sin él se usa la principal, de modo que una
+        llamada sin argumentos conserva el comportamiento anterior. Un conjunto
+        no registrado falla con UnknownSourceError y la ruta lo traduce a 400:
+        sincronizarlo con el mapa de campos de otra fuente descartaría todas
+        las filas en silencio.
         """
 
+        source = get_source(dataset) if dataset else DEFAULT_SOURCE
         token = (
             active_settings.socrata_app_token.get_secret_value()
             if active_settings.socrata_app_token
@@ -254,13 +284,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             timeout=active_settings.secop_timeout_seconds,
             max_retries=active_settings.secop_max_retries,
             max_requests=active_settings.secop_max_requests,
+            source=source,
         )
         session = session_factory() if session_factory else None
         tracker = None
         if session is not None:
             from app.db.repository import SyncRunTracker
 
-            tracker = SyncRunTracker(session, dataset=PROCESSES_DATASET, trigger="manual")
+            # El cursor es por conjunto: cada fuente se reanuda donde quedó la
+            # suya, sin que el avance de una arrastre a la otra.
+            tracker = SyncRunTracker(session, dataset=source.dataset, trigger="manual")
         return SyncService(
             client=client,
             repository=repository,
@@ -270,7 +303,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.state.sync_service_factory = make_sync_service
 
+    # Dos rutas para el mismo recurso, y es deliberado:
+    #   /health      — la consumen el healthcheck de Docker y los monitores,
+    #                  que no deben depender del prefijo de la API.
+    #   /api/health  — la consume la web. Todo el tráfico del navegador vive
+    #                  bajo /api, de modo que un único proxy lo cubre y no hay
+    #                  dos reglas que puedan divergir.
     @app.get("/health", response_model=HealthResponse, tags=["system"])
+    @app.get("/api/health", response_model=HealthResponse, tags=["system"])
     def health() -> HealthResponse:
         return HealthResponse(
             status="ok",
@@ -290,6 +330,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(auth_router)
     app.include_router(opportunities_router)
     app.include_router(knowledge_router)
+    app.include_router(profile_router)
+    app.include_router(profile_data_router)
     app.include_router(analysis_router)
 
     @asynccontextmanager

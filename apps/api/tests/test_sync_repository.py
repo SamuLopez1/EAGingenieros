@@ -26,6 +26,7 @@ from app.secop.client import (
     SecopError,
     UpstreamUnavailableError,
 )
+from app.secop.sources import SECOP_II, Source
 
 _UNSET = object()
 
@@ -37,21 +38,29 @@ def make_record(
     status: str = "Publicado",
     published_at: datetime | None | object = _UNSET,
     raw: Mapping[str, Any] | None = None,
+    reference: str | None = None,
+    entity: str = "EAG",
+    entity_nit: str | None = None,
+    amount: float | None = None,
+    source: Source = SECOP_II,
 ) -> OpportunityRecord:
     """Construye un registro sintético.
 
     ``published_at=None`` significa explícitamente "sin fecha". Omitir el
     parámetro usa una fecha fija, para no repetirla en cada llamada.
+
+    `source` permite construir filas de cualquiera de las plataformas, que es
+    lo que necesitan las pruebas de listado combinado y de posibles duplicados.
     """
 
     if published_at is _UNSET:
         published_at = datetime(2026, 9, 1, tzinfo=UTC)
     return OpportunityRecord(
         source_id=source_id,
-        source_dataset=PROCESSES_DATASET,
-        reference=f"REF-{source_id}",
+        source_dataset=source.dataset,
+        reference=reference if reference is not None else f"REF-{source_id}",
         title=title,
-        entity="EAG",
+        entity=entity,
         status=status,
         modality="Contratación directa",
         published_at=published_at,  # type: ignore[arg-type]
@@ -59,11 +68,19 @@ def make_record(
         official_url=f"https://community.secop.gov.co/{source_id}",
         fetched_at=datetime(2026, 9, 17, tzinfo=UTC),
         raw=dict(raw or {"id_del_proceso": source_id}),
+        entity_nit=entity_nit,
+        amount=amount,
+        platform=source.platform,
     )
 
 
 class FakeSecopClient:
     """Cliente con páginas preparadas. Registra cuántas veces se consultó."""
+
+    # El servicio de sincronización toma el conjunto del cliente, no de un
+    # parámetro aparte: así no pueden divergir. El doble declara la misma
+    # propiedad que el cliente real.
+    source = SECOP_II
 
     def __init__(self, pages: list[list[OpportunityRecord]] | Exception) -> None:
         self._pages = pages
@@ -235,6 +252,7 @@ def test_partial_results_before_a_failure_are_kept() -> None:
 
     class FailsMidway:
         requests_made = 2
+        source = SECOP_II
 
         def iter_records(self, **_kwargs: Any):
             yield make_record("A")
@@ -258,6 +276,7 @@ def test_partial_failure_is_resumable_without_duplicating() -> None:
 
     class FailsMidway:
         requests_made = 1
+        source = SECOP_II
 
         def iter_records(self, **_kwargs: Any):
             yield make_record("A")
@@ -375,6 +394,7 @@ def test_run_is_committed_before_the_network_call() -> None:
 
     class ClientThatRecordsOrder:
         requests_made = 0
+        source = SECOP_II
 
         def iter_records(self, **_kwargs: Any):
             calls.append("network")
