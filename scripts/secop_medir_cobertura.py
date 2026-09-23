@@ -22,7 +22,7 @@ ROOT = "https://www.datos.gov.co/resource"
 def get(dataset: str, params: dict[str, str]) -> list[dict]:
     url = f"{ROOT}/{dataset}.json?" + urllib.parse.urlencode(params)
     request = urllib.request.Request(url, headers={"Accept": "application/json"})
-    with urllib.request.urlopen(request, timeout=60) as response:  # noqa: S310
+    with urllib.request.urlopen(request, timeout=60) as response:
         return json.loads(response.read())
 
 
@@ -83,7 +83,7 @@ for inicio in range(0, len(refs), LOTE):
     presentes |= cruzar(lote, f"lote {inicio // LOTE + 1}")
 
 print("\n" + "=" * 68)
-print(f"RESULTADO SECOP I -> SECOP II (coincidencia exacta)")
+print("RESULTADO SECOP I -> SECOP II (coincidencia exacta)")
 print(f"  referencias de SECOP I        : {len(refs)}")
 print(f"  presentes en SECOP II         : {len(presentes)}")
 print(f"  cobertura                     : {100 * len(presentes) / len(refs):.1f} %")

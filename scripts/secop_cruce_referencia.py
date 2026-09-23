@@ -22,7 +22,7 @@ ROOT = "https://www.datos.gov.co/resource"
 def get(dataset: str, params: dict[str, str]) -> list[dict]:
     url = f"{ROOT}/{dataset}.json?" + urllib.parse.urlencode(params)
     request = urllib.request.Request(url, headers={"Accept": "application/json"})
-    with urllib.request.urlopen(request, timeout=45) as response:  # noqa: S310
+    with urllib.request.urlopen(request, timeout=45) as response:
         return json.loads(response.read())
 
 
