@@ -15,6 +15,47 @@ Repositorio en preparación: contiene el plan de implementación y el backlog, *
 
 Las instrucciones breves para los agentes están en [AGENTS.md](AGENTS.md). Los documentos internos, datos reales, credenciales y entregables académicos locales no forman parte del repositorio.
 
+## Lenguajes y stack
+
+Dos lenguajes escriben la aplicación; el resto son configuración e infraestructura.
+
+| Capa | Lenguaje | Tecnología |
+| --- | --- | --- |
+| API | **Python** 3.12 (imagen) · 3.14 (desarrollo) | FastAPI · Pydantic · SQLAlchemy · Alembic · LangGraph · pgvector |
+| Web | **TypeScript** (`.ts` y `.tsx`) | React 19 · Vite · React Router · TanStack Query · CSS con tokens |
+| Datos | **SQL** dentro de migraciones Alembic | PostgreSQL 17 + pgvector (HNSW) |
+| Estilos | **CSS** | Tokens propios derivados de `docs/design/DESIGN.md` |
+| Infra | **YAML** · Dockerfile · nginx | Docker Compose · GitHub Actions |
+| Documentación | **Markdown** | `docs/` |
+
+Medición real del repositorio, sin archivos generados ni dependencias instaladas
+(`python3 scripts/contar_lenguajes.py`). «Código» excluye líneas en blanco y de
+comentario: informar solo del total infla la cifra.
+
+| Lenguaje | Archivos | Código | Comentario |
+| --- | ---: | ---: | ---: |
+| Python | 99 | 11 706 | 2 951 |
+| TypeScript (TSX) | 13 | 1 623 | 217 |
+| Markdown | 32 | 2 416 | — |
+| CSS | 3 | 895 | 97 |
+| TypeScript | 11 | 526 | 201 |
+| HTML | 2 | 475 | — |
+| YAML | 3 | 184 | 63 |
+| Dockerfile | 4 | 63 | 42 |
+| Nginx | 1 | 41 | 26 |
+| Otros (JSON, INI, TOML, Mako, JS) | 9 | 187 | 95 |
+| **Total** | **177** | **18 116** | **3 692** |
+
+Es una fotografía, no un valor vivo: cambiar este mismo README altera la fila de
+Markdown, así que las cifras se desvían solas. Para el número actual, ejecutar el
+script.
+
+En Python, la API son ~67 archivos y las pruebas ~15. Las pruebas son cerca de
+un tercio de las líneas de Python, porque el repositorio exige una prueba
+reproducible antes de tocar la red. En TypeScript, el frontend reparte 24
+archivos entre `pages/` (pantallas), `design/` (componentes y tokens), `auth/`
+(sesión) y `api/` (contrato HTTP).
+
 ## Stack completo en Docker (recomendado)
 
 Levanta base de datos, API y web con un comando. **Base de datos propia
