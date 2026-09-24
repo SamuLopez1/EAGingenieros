@@ -79,12 +79,20 @@ class EvidenceMatch:
 
     ``state`` usa los cuatro estados del producto. Se propone aquí y lo confirma
     una persona: el grafo nunca aprueba.
+
+    ``decided_by`` distingue quién decidió —una regla determinista, la
+    recuperación semántica o una persona— porque sin esa distinción no se puede
+    medir si el sistema acierta, que es lo que el piloto necesita (HU-42).
+    ``rule`` e ``inputs`` conservan el cálculo para que sea reproducible (HU-29).
     """
 
     requirement_index: int
     state: str
     evidence_chunk_ids: list[int] = field(default_factory=list)
     rationale: str | None = None
+    decided_by: str = "recuperacion"
+    rule: str | None = None
+    inputs: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass

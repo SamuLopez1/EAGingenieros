@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from functools import cached_property
 from typing import Literal
 from urllib.parse import urlparse
 
 from pydantic import AnyHttpUrl, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.ai.providers import UnknownProviderError, get_provider
 
 
 class Settings(BaseSettings):
@@ -80,6 +83,37 @@ class Settings(BaseSettings):
     rag_similarity_threshold: float = Field(default=0.25, ge=0.0, le=1.0)
     rag_max_chunks: int = Field(default=6, ge=1, le=20)
 
+    # --- Inteligencia artificial -----------------------------------------
+    # Desactivada por defecto. No es una limitación técnica: es que activarla
+    # implica enviar texto de pliegos a un proveedor externo, y eso exige
+    # autorización empresarial específica (HU-27, HU-41). Arrancar enviando por
+    # defecto convertiría una decisión de negocio en un efecto secundario de
+    # desplegar.
+    #
+    # Con la IA desactivada el sistema sigue siendo útil: las reglas
+    # deterministas comparan condiciones objetivas y la recuperación local busca
+    # evidencia. Simplemente no interpreta lenguaje natural.
+    ai_enabled: bool = False
+    ai_provider: str = "openai"
+    # Modelo concreto. Vacío usa el del proveedor. Se declara aquí y no en el
+    # código porque los modelos cambian más rápido que este repositorio.
+    ai_model: str | None = None
+    # Tope de gasto mensual en dólares. Vacío significa sin tope, y se declara
+    # como tal en la interfaz en lugar de presentar un control que no existe.
+    ai_monthly_budget_usd: Decimal | None = None
+    # Versión del prompt y del esquema de salida. Se guardan con cada resultado:
+    # sin ellas, comparar dos ejecuciones no significa nada.
+    ai_prompt_version: str = "v1"
+    ai_schema_version: str = "v1"
+
+    # Claves por proveedor. Se declaran como secreto y nunca se registran.
+    # `openai_api_key` también sirve para cualquier endpoint compatible.
+    openai_api_key: SecretStr | None = None
+    nvidia_api_key: SecretStr | None = None
+    openrouter_api_key: SecretStr | None = None
+    router9_api_key: SecretStr | None = None
+    router9_base_url: AnyHttpUrl | None = None
+
     @field_validator("cors_allowed_origins", mode="before")
     @classmethod
     def split_origins(cls, value: object) -> object:
@@ -108,6 +142,13 @@ class Settings(BaseSettings):
         "embeddings_api_key",
         "embeddings_model",
         "clamav_host",
+        "ai_model",
+        "ai_monthly_budget_usd",
+        "openai_api_key",
+        "nvidia_api_key",
+        "openrouter_api_key",
+        "router9_api_key",
+        "router9_base_url",
         mode="before",
     )
     @classmethod
@@ -153,6 +194,59 @@ class Settings(BaseSettings):
         if self.embeddings_api_key is None:
             raise RuntimeError("EAG_EMBEDDINGS_API_KEY no está configurada")
         return self.embeddings_api_key.get_secret_value()
+
+    # --- Inteligencia artificial -----------------------------------------
+
+    def ai_configuration_error(self) -> str | None:
+        """Motivo por el que la IA no puede usarse, o None si sí puede.
+
+        Se devuelve el motivo en lugar de solo un booleano porque «la IA no está
+        disponible» tiene tres causas distintas —desactivada, sin clave, o
+        proveedor mal escrito— y confundirlas obliga a adivinar cuál es.
+        """
+
+        if not self.ai_enabled:
+            return "la IA está desactivada (EAG_AI_ENABLED=false)"
+        try:
+            config = get_provider(self.ai_provider)
+        except UnknownProviderError as error:
+            return str(error)
+        if self.ai_api_key() is None:
+            return f"falta {config.api_key_env}"
+        return None
+
+    @property
+    def ai_is_configured(self) -> bool:
+        """Indica si hay IA activada **y** utilizable.
+
+        Las dos condiciones juntas: activada sin clave no sirve, y una clave sin
+        activar tampoco. Declararla configurada cuando no puede llamar haría que
+        el análisis fallara sin explicar por qué.
+        """
+
+        return self.ai_configuration_error() is None
+
+    def ai_api_key(self) -> str | None:
+        """Clave del proveedor configurado, o None.
+
+        El nombre del campo se deriva del nombre de la variable del proveedor
+        (`EAG_OPENAI_API_KEY` → `openai_api_key`) para que añadir un proveedor no
+        obligue a recordar que hay que tocar también este método.
+        """
+
+        try:
+            config = get_provider(self.ai_provider)
+        except UnknownProviderError:
+            return None
+        field_name = config.api_key_env.removeprefix("EAG_").lower()
+        secret = getattr(self, field_name, None)
+        # Se comprueba el tipo y no solo que no sea None: si el nombre derivado
+        # no correspondiera a un campo de tipo secreto, `get_secret_value`
+        # devolvería algo que no es una clave y el fallo aparecería más tarde,
+        # en forma de petición rechazada por el proveedor.
+        if not isinstance(secret, SecretStr):
+            return None
+        return secret.get_secret_value()
 
     @property
     def database_is_configured(self) -> bool:

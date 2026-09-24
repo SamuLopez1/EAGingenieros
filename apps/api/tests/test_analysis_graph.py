@@ -79,6 +79,20 @@ def requirement(
     )
 
 
+# Requisito **sin condiciones objetivas**: no menciona años, cantidades, plazos
+# ni valores indexados. Es el que ejercita la comparación semántica. El requisito
+# por defecto de `requirement()` sí contiene «cinco años» y por tanto se decide
+# por aritmética, que es otro camino y tiene sus propias pruebas.
+TEXTO_SEMANTICO = (
+    "El proponente debe acreditar capacidad tecnica acreditada y experiencia "
+    "en interventoria de obras"
+)
+
+
+def semantic_requirement() -> ValidatedRequirement:
+    return requirement(text=TEXTO_SEMANTICO, quote=TEXTO_SEMANTICO)
+
+
 # --- Normalización ---------------------------------------------------------
 
 
@@ -232,7 +246,7 @@ def test_unverified_citation_leads_to_manual_review() -> None:
 def test_no_evidence_leads_to_manual_review_not_non_compliance() -> None:
     """La falta de información no es incumplimiento: son cosas distintas."""
 
-    decision = decide_state(requirement(), [], threshold=0.25)
+    decision = decide_state(semantic_requirement(), [], threshold=0.25)
 
     assert decision.state == "revision_manual"
     assert decision.state != "no_cumple"
@@ -241,7 +255,7 @@ def test_no_evidence_leads_to_manual_review_not_non_compliance() -> None:
 
 def test_weak_evidence_leads_to_manual_review() -> None:
     decision = decide_state(
-        requirement(), [chunk(TEXTO_PLIEGO, score=0.10)], threshold=0.25
+        semantic_requirement(), [chunk(TEXTO_PLIEGO, score=0.10)], threshold=0.25
     )
 
     assert decision.state == "revision_manual"
@@ -251,7 +265,7 @@ def test_only_expired_evidence_leads_to_manual_review() -> None:
     """Un certificado vencido no puede sustentar un cumplimiento."""
 
     decision = decide_state(
-        requirement(), [chunk(TEXTO_PLIEGO, expired=True)], threshold=0.25
+        semantic_requirement(), [chunk(TEXTO_PLIEGO, expired=True)], threshold=0.25
     )
 
     assert decision.state == "revision_manual"
@@ -262,7 +276,7 @@ def test_unverified_evidence_leads_to_manual_review() -> None:
     """Adjuntar un documento no garantiza que respalde lo afirmado."""
 
     decision = decide_state(
-        requirement(), [chunk(TEXTO_PLIEGO, verified=False)], threshold=0.25
+        semantic_requirement(), [chunk(TEXTO_PLIEGO, verified=False)], threshold=0.25
     )
 
     assert decision.state == "revision_manual"
@@ -271,7 +285,7 @@ def test_unverified_evidence_leads_to_manual_review() -> None:
 
 def test_strong_verified_evidence_proposes_compliance() -> None:
     decision = decide_state(
-        requirement(), [chunk(TEXTO_PLIEGO, score=0.85)], threshold=0.25
+        semantic_requirement(), [chunk(TEXTO_PLIEGO, score=0.85)], threshold=0.25
     )
 
     assert decision.state == "cumple"
@@ -283,10 +297,86 @@ def test_proposal_never_claims_final_approval() -> None:
     """El grafo propone; nunca aprueba."""
 
     decision = decide_state(
-        requirement(), [chunk(TEXTO_PLIEGO, score=0.9)], threshold=0.25
+        semantic_requirement(), [chunk(TEXTO_PLIEGO, score=0.9)], threshold=0.25
     )
 
     assert "Requiere confirmación humana" in decision.rationale
+
+
+# --- Condiciones objetivas: el defecto del falso cumplimiento --------------
+
+
+def test_objective_requirement_without_company_data_never_proposes_compliance() -> None:
+    """Regresión del defecto más caro que tenía el grafo.
+
+    Antes, «acreditar cinco años» se proponía como «cumple» cuando un fragmento
+    sobre experiencia puntuaba por encima del umbral: **los números no se
+    comparaban nunca**. Con la empresa sin años registrados, la respuesta
+    correcta es revisión manual —falta el dato—, no un cumplimiento.
+    """
+
+    decision = decide_state(
+        requirement(text="El proponente debe acreditar cinco anos"),
+        [chunk(TEXTO_PLIEGO, score=0.99)],
+        threshold=0.25,
+        known_values=None,
+    )
+
+    assert decision.state == "revision_manual"
+    assert decision.state != "cumple"
+    assert decision.decided_by == "regla"
+    assert "no consta" in decision.rationale
+
+
+def test_objective_requirement_ignores_retrieval_entirely() -> None:
+    """Con condiciones objetivas, una evidencia relevante no cambia el veredicto.
+
+    Es lo contrario del defecto anterior: aquí la empresa sí tiene el dato, y
+    acredita dos años frente a los cinco exigidos. Una evidencia con relevancia
+    0,99 no puede convertir eso en un cumplimiento.
+    """
+
+    from decimal import Decimal
+
+    decision = decide_state(
+        requirement(text="El proponente debe acreditar cinco anos"),
+        [chunk(TEXTO_PLIEGO, score=0.99)],
+        threshold=0.25,
+        known_values={"duracion:anios": Decimal(2)},
+    )
+
+    assert decision.state == "no_cumple"
+    assert decision.decided_by == "regla"
+    assert decision.rule == "condicion_objetiva_incumplida"
+    assert decision.inputs is not None
+    assert decision.inputs["exigido"] == "5"
+    assert decision.inputs["acreditado"] == "2"
+
+
+def test_satisfied_objective_condition_is_compliance_by_arithmetic() -> None:
+    from decimal import Decimal
+
+    decision = decide_state(
+        requirement(text="El proponente debe acreditar cinco anos"),
+        [],
+        threshold=0.25,
+        known_values={"duracion:anios": Decimal(7)},
+    )
+
+    assert decision.state == "cumple"
+    assert decision.decided_by == "regla"
+    assert decision.rule == "condicion_objetiva_satisfecha"
+
+
+def test_semantic_requirement_still_uses_retrieval() -> None:
+    """Las condiciones interpretables siguen decidiéndose por recuperación."""
+
+    decision = decide_state(
+        semantic_requirement(), [chunk(TEXTO_PLIEGO, score=0.85)], threshold=0.25
+    )
+
+    assert decision.decided_by == "recuperacion"
+    assert decision.rule is None
 
 
 # --- Grafo completo --------------------------------------------------------

@@ -1,10 +1,25 @@
 """Persistencia del MVP: modelo, repositorio y sincronización."""
 
-# La importación de `knowledge_models` es necesaria aunque no se use el nombre:
-# registra sus tablas en `Base.metadata`. Sin ella, `create_all` no las crea y
-# la ingesta falla con "no such table" solo en los entornos que crean el esquema
-# desde el modelo en lugar de con Alembic.
-from app.db import knowledge_models  # noqa: F401
+# Estas importaciones son necesarias aunque no se usen los nombres: registran sus
+# tablas en `Base.metadata`. Sin ellas, `create_all` no las crea y las consultas
+# fallan con "no such table" solo en los entornos que construyen el esquema desde
+# el modelo en lugar de con Alembic —es decir, en las pruebas y no en producción,
+# que es la peor combinación posible—. `profile_models` faltaba aquí y solo se
+# registraba de rebote, al importar el servicio de perfil.
+from app.db import (  # noqa: F401
+    ai_models,
+    analysis_models,
+    knowledge_models,
+    profile_models,
+)
+from app.db.ai_models import AiCache, AiUsage
+from app.db.analysis_models import (
+    AnalysisApproval,
+    AnalysisMatch,
+    AnalysisRequirement,
+    AnalysisReview,
+    AnalysisRun,
+)
 from app.db.knowledge_models import KnowledgeChunk, KnowledgeDocument, RagQueryLog
 from app.db.models import (
     AuditEvent,
@@ -26,6 +41,13 @@ from app.db.repository import (
 from app.db.sync_service import SyncRequest, SyncService
 
 __all__ = [
+    "AiCache",
+    "AiUsage",
+    "AnalysisApproval",
+    "AnalysisMatch",
+    "AnalysisRequirement",
+    "AnalysisReview",
+    "AnalysisRun",
     "AuditEvent",
     "Base",
     "InMemoryOpportunityRepository",

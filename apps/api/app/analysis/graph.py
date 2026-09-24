@@ -21,6 +21,7 @@ ahí solo consumiría cuota. El contador está en el estado y el grafo decide.
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from decimal import Decimal
 from typing import Any
 
 from langgraph.graph import END, START, StateGraph
@@ -30,6 +31,7 @@ from app.analysis.nodes import (
     decide_state,
     node_validate_citations,
 )
+from app.analysis.rules import run_rules
 from app.analysis.state import (
     AnalysisState,
     EvidenceMatch,
@@ -45,6 +47,13 @@ class AnalysisDependencies:
     Se pasan como un objeto en lugar de como estado del grafo porque no son
     serializables: el checkpointer persiste el estado, y una sesión de base de
     datos o un cliente HTTP no se pueden guardar.
+
+    `company_values` entrega las magnitudes conocidas de la empresa —años de
+    experiencia, número de vehículos, patrimonio— para que las condiciones
+    objetivas se comparen con aritmética (HU-29) en lugar de por relevancia de
+    recuperación. Quien lo implemente decide **qué valores incluye**: si solo
+    pasa los verificados por una persona, la seguridad está en el origen y no
+    hay que repetir la comprobación en cada nodo.
     """
 
     def __init__(
@@ -56,11 +65,13 @@ class AnalysisDependencies:
         ],
         retrieve_evidence: Callable[[str], list[RetrievedChunk]],
         threshold: float = 0.25,
+        company_values: Callable[[], dict[str, Decimal]] | None = None,
     ) -> None:
         self.load_chunks = load_chunks
         self.extract_requirements = extract_requirements
         self.retrieve_evidence = retrieve_evidence
         self.threshold = threshold
+        self.company_values = company_values or (lambda: {})
 
 
 def build_analysis_graph(deps: AnalysisDependencies) -> Any:
@@ -208,10 +219,38 @@ def build_analysis_graph(deps: AnalysisDependencies) -> Any:
         }
 
     def match_evidence(state: AnalysisState) -> dict[str, Any]:
-        """Vincula cada requisito con la evidencia empresarial recuperada."""
+        """Vincula cada requisito con la evidencia empresarial recuperada.
 
+        Las condiciones objetivas se deciden antes y por aritmética; para el
+        resto se recupera evidencia semántica. La consulta de recuperación se
+        omite cuando una regla ya decidió, porque pedirla sería gastar cuota para
+        un resultado que no se va a usar.
+        """
+
+        known = deps.company_values()
         matches: list[EvidenceMatch] = []
+        por_regla = 0
+
         for index, requirement in enumerate(state.requirements):
+            outcome = run_rules(requirement.text, known=known)
+            if outcome is not None:
+                # Una condición objetiva con el dato ausente también se decide
+                # aquí: dejarla caer a la recuperación reintroduciría el falso
+                # cumplimiento por la puerta de atrás.
+                por_regla += 1
+                matches.append(
+                    EvidenceMatch(
+                        requirement_index=index,
+                        state=outcome.state,
+                        rationale=outcome.rationale,
+                        evidence_chunk_ids=[],
+                        decided_by="regla",
+                        rule=outcome.rule,
+                        inputs=outcome.inputs,
+                    )
+                )
+                continue
+
             try:
                 evidence = deps.retrieve_evidence(requirement.text)
             except Exception:  # noqa: BLE001 - una consulta fallida no debe abortar
@@ -224,6 +263,9 @@ def build_analysis_graph(deps: AnalysisDependencies) -> Any:
                     state=decision.state,
                     evidence_chunk_ids=decision.evidence_chunk_ids,
                     rationale=decision.rationale,
+                    decided_by=decision.decided_by,
+                    rule=decision.rule,
+                    inputs=decision.inputs or {},
                 )
             )
 
@@ -235,7 +277,8 @@ def build_analysis_graph(deps: AnalysisDependencies) -> Any:
                 _step(
                     "vincular_evidencia",
                     StepStatus.DONE,
-                    f"{propuestos} propuestas de cumplimiento de {len(matches)} requisitos",
+                    f"{propuestos} propuestas de cumplimiento de {len(matches)} "
+                    f"requisitos ({por_regla} por reglas deterministas)",
                 ),
             ],
         }

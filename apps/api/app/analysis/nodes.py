@@ -16,7 +16,9 @@ import re
 import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass
+from decimal import Decimal
 
+from app.analysis.rules import run_rules
 from app.analysis.state import (
     AnalysisState,
     RequirementCandidate,
@@ -153,11 +155,18 @@ class MatchDecision:
 
     Se separa del `EvidenceMatch` porque la decisión se toma con reglas y el
     registro que se persiste es más simple.
+
+    Conserva ``rule`` e ``inputs`` además del estado: HU-29 exige que cada
+    cálculo deje entradas, regla, resultado y motivo, para que sea reproducible
+    y auditable.
     """
 
     state: str
     rationale: str
     evidence_chunk_ids: list[int]
+    decided_by: str = "recuperacion"
+    rule: str | None = None
+    inputs: dict[str, object] | None = None
 
 
 def decide_state(
@@ -165,6 +174,7 @@ def decide_state(
     evidence: Sequence[RetrievedChunk],
     *,
     threshold: float,
+    known_values: dict[str, Decimal] | None = None,
 ) -> MatchDecision:
     """Decide el estado de un requisito a partir de la evidencia recuperada.
 
@@ -172,13 +182,23 @@ def decide_state(
 
     1. **Sin cita verificada → revisión manual.** No se puede afirmar nada sobre
        un requisito cuya fuente no se ha podido comprobar.
-    2. **Sin evidencia suficiente → revisión manual, nunca `no_cumple`.** La
-       falta de información no es incumplimiento: son cosas distintas y
-       confundirlas rechazaría oportunidades válidas.
-    3. **Con evidencia por encima del umbral → `cumple` propuesto**, siempre
-       sujeto a revisión humana.
-    4. **Evidencia débil → `revision_manual`.** Es preferible pedir una lectura a
-       afirmar un cumplimiento que no se sostiene.
+    2. **Condiciones objetivas → aritmética, no relevancia.** Si el requisito
+       contiene años, cantidades, plazos o valores indexados, se comparan los
+       números y la recuperación semántica no interviene. Este paso existe porque
+       sin él un requisito de «mínimo cinco años» se proponía como «cumple»
+       cuando un fragmento sobre experiencia puntuaba alto, **sin que los números
+       se compararan nunca**. Ese falso cumplimiento es el error más caro que
+       este sistema puede cometer.
+    3. **Sin evidencia suficiente → revisión manual, nunca `no_cumple`.** La
+       falta de información no es incumplimiento.
+    4. **Con evidencia por encima del umbral → `cumple` propuesto.**
+    5. **Evidencia débil o sin verificar → revisión manual.**
+
+    Importante sobre el paso 2: cuando hay condiciones objetivas pero **falta el
+    dato de la empresa**, se devuelve revisión manual y **no se cae** a la
+    comparación semántica. Dejar que lo hiciera reintroduciría el defecto por la
+    puerta de atrás: un fragmento sobre «experiencia» volvería a proponer un
+    cumplimiento sin saber cuántos años tiene la empresa.
     """
 
     if not requirement.citation_verified:
@@ -191,6 +211,24 @@ def decide_state(
             evidence_chunk_ids=[],
         )
 
+    # --- Condiciones objetivas: comparación determinista (HU-29) -----------
+    outcome = run_rules(requirement.text, known=known_values)
+    if outcome is not None:
+        return MatchDecision(
+            state=outcome.state,
+            rationale=outcome.rationale
+            + (
+                ""
+                if outcome.state == "revision_manual"
+                else " Comparación reproducible de los dos valores; requiere confirmación humana."
+            ),
+            evidence_chunk_ids=[],
+            decided_by="regla",
+            rule=outcome.rule,
+            inputs=outcome.inputs,
+        )
+
+    # --- Resto: comparación semántica con la evidencia recuperada ----------
     usable = [c for c in evidence if c.score >= threshold and not c.is_expired]
     if not usable:
         expired = [c for c in evidence if c.is_expired]
