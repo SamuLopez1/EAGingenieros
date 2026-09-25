@@ -1,15 +1,39 @@
--- Prueba de integración PostgreSQL/RLS para el dummy con un único usuario.
+-- Prueba de integración PostgreSQL/RLS para el analista sintético del dummy.
 -- Ejecutar como postgres, después de las migraciones. No imprime identidades.
 -- No modifica filas y todos los cambios de rol/claims son transaccionales.
 begin;
 
 do $$
 begin
-    if (select count(*) from auth.users) <> 1 then
-        raise exception 'This check requires exactly one dummy Auth user';
+    if not has_table_privilege('service_role', 'public.invitations', 'SELECT') then
+        raise exception 'Backend cannot read invitations before revocation';
+    end if;
+    if not has_table_privilege('authenticated', 'public.invitations', 'SELECT')
+        or not has_table_privilege('authenticated', 'public.audit_events', 'SELECT') then
+        raise exception 'RLS-protected administrator reads lack SQL privileges';
+    end if;
+    if has_table_privilege('anon', 'public.invitations', 'SELECT') then
+        raise exception 'Anonymous role can read invitations';
+    end if;
+    if has_table_privilege('authenticated', 'public.invitations', 'UPDATE')
+        or has_table_privilege('authenticated', 'public.audit_events', 'INSERT') then
+        raise exception 'Authenticated role has administrative write privileges';
+    end if;
+end;
+$$;
+
+do $$
+declare
+    dummy_user_id uuid;
+begin
+    select id into dummy_user_id
+    from auth.users
+    where email = 'eag.analista.dummy@example.com';
+    if dummy_user_id is null then
+        raise exception 'This check requires the synthetic analyst user';
     end if;
     perform set_config(
-        'request.jwt.claim.sub', (select id::text from auth.users limit 1), true
+        'request.jwt.claim.sub', dummy_user_id::text, true
     );
 end;
 $$;

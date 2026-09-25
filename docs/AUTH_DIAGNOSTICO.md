@@ -3,6 +3,44 @@
 Alcance: issue #4, rama `codex/mvp-04-auth-roles`, PR #19 hacia `dev`.
 No se considera probado el login real ni se cierran los criterios E2E.
 
+## Incidente de disponibilidad del dummy (2026-09-24)
+
+El panel de Supabase mostró `eag-mvp-auth-dummy` en estado **paused**. Se usó
+`Resume project` con autorización del usuario. El panel pasó por `Restoration in
+progress` y `Coming up`, y confirmó `Restoration complete`. Durante el arranque
+JWKS respondió HTTP 502; después respondió 200 y Auth health respondió 200 con
+la clave publicable. Una consulta agregada en SQL Editor confirmó las dos
+cuentas sintéticas con correo confirmado, perfil y rol esperado. Esto aún no
+demuestra login/logout con contraseña ni revocación real.
+
+Se descubrió además un defecto de permisos independiente de la pausa: con la
+clave de servidor, Auth Admin devolvió 200 pero `GET` de `invitations` en
+PostgREST devolvió HTTP 403 / SQLSTATE `42501`. `has_table_privilege` confirmó
+que `service_role` carecía de `SELECT` en esa tabla. También faltaba `SELECT`
+para `authenticated` en `invitations` y `audit_events`, aunque las políticas RLS
+reservan su lectura a administradores. Con autorización se aplicó al dummy la
+migración `20260924000000_service_invitation_read.sql`: SQL Editor informó
+éxito, `service_role` leyó `invitations` por PostgREST con HTTP 200 y la consulta
+de privilegios devolvió `true` para las tres lecturas previstas, `false` para
+`anon` y `false` para escritura de `authenticated` en invitaciones. No se
+concedió lectura de auditoría a `service_role`.
+
+En transacciones con `SET LOCAL ROLE authenticated`, una comprobación con el
+analista sintético confirmó perfil, pertenencia y organización propios, sin
+visibilidad de auditoría ni invitaciones; otra con el administrador confirmó la
+lectura de las dos pertenencias de EAG y de auditoría. Ambas terminaron con
+`ROLLBACK` y sin cambios de datos. Son pruebas SQL/RLS reales, no login E2E.
+
+Un proyecto pausado puede responder HTTP 540; la API debe fallar cerrada con 503
+si su consulta de pertenencia recibe un error del proveedor. Hay una prueba
+offline sintética para ese caso y otra para negar un JWT ya emitido después de
+retirar la pertenencia simulada. Ninguna sustituye la revocación real de Supabase.
+
+Para diagnosticar una interrupción futura: revisar primero el estado del proyecto
+en el panel; después probar salud/JWKS, login y `/auth/session` en ese orden. No
+interpretar un fallo de DNS, HTTP 502 o 540 como contraseña incorrecta. No usar
+la API de negocio ni afirmar disponibilidad hasta verificar la sesión completa.
+
 ## Cambio a correo y contraseña (2026-09-08)
 
 Hecho confirmado por el usuario: UI, API, proxy, JWT/JWKS y configuración local

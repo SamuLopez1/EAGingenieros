@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 from app.auth import AuthServices, JwtValidator, Membership, Role, SupabaseMembershipResolver
 from app.config import Settings
-from app.invitations import InvitationService
+from app.invitations import InvitationResendUnsupported, InvitationService
 from app.main import create_app
 
 ISSUER = "https://example.supabase.co/auth/v1"
@@ -144,7 +144,51 @@ def test_authenticated_subject_without_membership_returns_403() -> None:
     assert response.status_code == 403
 
 
-def test_admin_can_create_resend_and_revoke_invitation_only_through_backend() -> None:
+def test_removing_membership_denies_an_already_issued_token_offline() -> None:
+    """El JWT sigue firmado, pero cada solicitud vuelve a resolver permisos."""
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    subject_id = uuid4()
+    memberships = {subject_id: Membership(ORGANIZATION_ID, Role.ANALYST)}
+    client = make_client(private_key, memberships)
+    headers = bearer(make_token(private_key, subject_id))
+
+    assert client.get("/auth/session", headers=headers).status_code == 200
+    del memberships[subject_id]
+    assert client.get("/auth/session", headers=headers).status_code == 403
+
+
+def test_paused_provider_response_fails_closed_with_503_offline(monkeypatch) -> None:
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    subject_id = uuid4()
+    settings = Settings(
+        environment="test",
+        auth_jwks_url="https://example.supabase.co/auth/v1/.well-known/jwks.json",
+        auth_issuer=ISSUER,
+        auth_audience=AUDIENCE,
+        supabase_url="https://example.supabase.co",
+        supabase_publishable_key="test-only-publishable-key",
+    )
+
+    def paused_response(url: str, **kwargs: object) -> httpx.Response:
+        del kwargs
+        return httpx.Response(540, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr("app.auth.httpx.get", paused_response)
+    services = AuthServices(
+        validator=JwtValidator(
+            settings, signing_key_loader=FixedSigningKey(private_key.public_key())
+        ),
+        memberships=SupabaseMembershipResolver(settings),
+    )
+    client = TestClient(create_app(settings, auth_services=services))
+
+    response = client.get("/auth/session", headers=bearer(make_token(private_key, subject_id)))
+
+    assert response.status_code == 503
+    assert "test-only-publishable-key" not in response.text
+
+
+def test_admin_can_create_resend_and_revoke_with_fake_gateway_offline() -> None:
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     administrator_id = uuid4()
     invitations = FakeInvitations()
@@ -169,6 +213,28 @@ def test_admin_can_create_resend_and_revoke_invitation_only_through_backend() ->
     assert invitations.created == [("user@example.com", ORGANIZATION_ID, administrator_id)]
     assert invitations.resent == [(invitation_id, ORGANIZATION_ID, administrator_id)]
     assert invitations.revoked == [(invitation_id, ORGANIZATION_ID, administrator_id)]
+
+
+def test_unsupported_resend_is_not_reported_as_success() -> None:
+    class UnsupportedResend(FakeInvitations):
+        def resend(self, *, invitation_id: UUID, organization_id: UUID, actor_id: UUID) -> None:
+            del invitation_id, organization_id, actor_id
+            raise InvitationResendUnsupported
+
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    administrator_id = uuid4()
+    client = make_client(
+        private_key,
+        {administrator_id: Membership(ORGANIZATION_ID, Role.ADMINISTRATOR)},
+        UnsupportedResend(),
+    )
+
+    response = client.post(
+        f"/auth/invitations/{uuid4()}/resend",
+        headers=bearer(make_token(private_key, administrator_id)),
+    )
+
+    assert response.status_code == 501
 
 
 def test_es256_token_from_a_recent_supabase_project_is_accepted() -> None:

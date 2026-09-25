@@ -62,11 +62,21 @@ El navegador solo usa `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY`.
 Nunca añada claves de servicio, contraseñas, tokens ni datos personales a Git,
 `VITE_*`, OpenAPI o logs. Sin configuración, la UI informa el pendiente.
 
-**Login real pendiente:** un administrador autorizado debe provisionar el dummy
-con contraseña, correo confirmado, perfil y membership de EAG con rol
-administrador o analista; después probar el acceso con autorización. Esta tarea
-no crea usuarios ni cambia contraseñas o datos de Supabase. La recuperación de
-contraseña queda pendiente y no tiene interfaz en esta versión.
+Para probar el proyecto dummy se provisionan manualmente, desde Authentication
+> Users, dos cuentas sintéticas con **Auto confirm user** activado y contraseñas
+que no se registran en este repositorio:
+
+| Cuenta sintética | Rol EAG |
+| --- | --- |
+| `eag.admin.dummy@example.com` | `administrador` |
+| `eag.analista.dummy@example.com` | `analista` |
+
+Después de crearlas, ejecutar
+`supabase/tests/provision_dummy_password_users.sql` como administrador de la
+base de datos del proyecto dummy. El fixture crea perfiles, membresías EAG y
+auditoría mínima de forma idempotente, sin credenciales. No es una migración ni
+debe aplicarse a un proyecto de EAG. La recuperación de contraseña queda
+pendiente y no tiene interfaz en esta versión.
 
 Se conservan las invitaciones administrativas, revocación, auditoría, roles,
 RLS y todas las migraciones. El aprovisionamiento sigue siendo responsabilidad
