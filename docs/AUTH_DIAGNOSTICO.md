@@ -3,7 +3,81 @@
 Alcance: issue #4, rama `codex/mvp-04-auth-roles`, PR #19 hacia `dev`.
 El login y logout reales de la cuenta analista dummy, y el login real de la
 cuenta administradora dummy, se comprobaron el 2026-09-24. La revocación real
-y la revisión humana siguen pendientes.
+se comprobó el 2026-09-25. La invitación con entrega y aceptación por correo,
+y la revisión humana, siguen pendientes.
+
+## Revocación real controlada (2026-09-25)
+
+Se probó exclusivamente en `eag-mvp-auth-dummy`, con una cuenta sintética
+desechable `example.invalid` y contraseña aleatoria no registrada. Se creó el
+usuario mediante Auth Admin, se registró perfil, membresía, invitación y
+auditoría mediante `record_eag_invitation`, y se obtuvo un JWT real con login
+por contraseña. Antes de revocar, `/auth/session` devolvió 200, una ruta
+administrativa y una organización ajena devolvieron 403, y RLS mostró una
+única membresía propia. Se llamó al gateway real de revocación, que ejecutó
+`revoke_eag_invitation` y eliminó el usuario Auth. Con **el mismo JWT**,
+`/auth/session` devolvió 403 y RLS devolvió cero filas; el refresh devolvió
+400 y la búsqueda Auth Admin del usuario, 404. La prueba terminó con estado
+correcto y sin cuenta sintética restante. No se imprimieron ni guardaron JWT,
+contraseña ni claves.
+
+Comandos ejecutados desde `apps/api`, con acceso de red acotado al proyecto
+dummy y al API local (el script de prueba fue local e ignorado por Git):
+
+```powershell
+.\.venv\Scripts\ruff.exe check ..\..\tmp\mvp04_live_revocation.py
+.\.venv\Scripts\python.exe -m py_compile ..\..\tmp\mvp04_live_revocation.py
+$env:PYTHONPATH = (Get-Location).Path
+.\.venv\Scripts\python.exe ..\..\tmp\mvp04_live_revocation.py
+.\.venv\Scripts\python.exe ..\..\tmp\mvp04_live_revocation.py --run
+```
+
+Resultados: Ruff y compilación correctos; `preflight=ok`; creación Auth 200;
+RPC de registro 204; login 200; controles previos 200/403/403 y una fila RLS;
+revocación correcta; controles posteriores 403, cero filas RLS, refresh 400 y
+usuario Auth 404. La creación de la fixture **no envió una invitación por
+correo**; por tanto, no demuestra entrega, aceptación del enlace, contraseña
+inicial ni recuperación. La prueba llama al gateway de revocación; no es una
+prueba E2E de la ruta HTTP administrativa de revocación.
+
+## Invitación backend sin buzón controlado (2026-09-25)
+
+El usuario pidió probar solo el backend y confirmó que no dispone de un buzón
+de prueba controlado. Dos solicitudes de invitación reales, con direcciones
+únicas del dominio no entregable `example.invalid`, llegaron al endpoint
+`/auth/v1/invite` del proyecto dummy. Supabase devolvió HTTP 400; el gateway
+lo convirtió en `InvitationProviderUnavailable`. La búsqueda Auth Admin
+posterior no encontró cuentas residuales. No hubo entrega ni aceptación de
+correo, ni registro de invitación o membresía. Por tanto, el flujo de creación
+de invitaciones no está validado de extremo a extremo.
+
+Comandos: `ruff check` y `py_compile` del script local ignorado
+`tmp/mvp04_live_invite.py` correctos; preflight de Auth Admin 200; ejecución
+`--run` con resultado `provider_status=400 endpoint=/auth/v1/invite` y
+`cleanup_partial_auth=not_needed`. Se solicitó un intento con un dominio
+reservado de formato aceptado por proveedores de correo, pero la revisión
+automática lo rechazó porque podía generar correo a un destino no controlado.
+Ese intento no se ejecutó. Se requiere un buzón autorizado para continuar.
+
+## Pasos para cerrar MVP-04
+
+1. EAG confirma la aceptación técnica de la dependencia MVP-03 y el entorno
+   Supabase definitivo (o declara que el dummy basta para aceptar MVP-04).
+2. EAG decide explícitamente si el reenvío de invitación forma parte de MVP-04.
+   Hoy la ruta devuelve 501. Si se excluye, registrar el trabajo en una issue
+   separada; si se incluye, implementar y probar antes de aceptar.
+3. Para validar invitación completa, preparar un buzón de prueba controlado y
+   autorizar su uso. Un administrador invita desde la API; comprobar Auth,
+   perfil, membresía y auditoría, recibir y aceptar el correo, iniciar sesión,
+   comprobar rol y aislamiento, revocar y confirmar 403 con el JWT anterior y
+   fallo de refresh. Registrar solo códigos y resultados, sin correo, JWT,
+   contraseña, claves ni enlaces de invitación.
+4. Revisar PR #19 contra los criterios de `docs/issues/MVP-04.md` y aprobarlo
+   mediante una persona de EAG. La revisión automática de Copilot no equivale
+   a aprobación humana. Confirmar CI `api` y `web` en verde para el commit final.
+5. Tras la aceptación humana, fusionar PR #19 a `dev` según el proceso de EAG,
+   verificar que la rama integrada conserve las comprobaciones y cerrar la
+   issue #4 con enlace al PR y a esta evidencia. No cerrarla solo por el push.
 
 ## Login real del analista y diagnóstico JWKS (2026-09-24)
 
@@ -27,8 +101,8 @@ guardar ni mostrar contraseña o token.
 Después, el usuario inició sesión con la cuenta administradora dummy en la
 misma UI. Se observó "Sesión autenticada" y rol `administrador` devuelto por
 el servidor; una recarga conservó la sesión. No se leyó ni guardó la contraseña
-o el JWT. No se probó aún una revocación real de sesión o membership. Esa
-comprobación y la revisión humana impiden cerrar la issue.
+o el JWT. La revocación real de una cuenta separada se comprobó el 2026-09-25,
+como se registra arriba. La revisión humana aún impide cerrar la issue.
 
 ## Incidente de disponibilidad del dummy (2026-09-24)
 
@@ -63,7 +137,8 @@ lectura de las dos pertenencias de EAG y de auditoría. Ambas terminaron con
 Un proyecto pausado puede responder HTTP 540; la API debe fallar cerrada con 503
 si su consulta de pertenencia recibe un error del proveedor. Hay una prueba
 offline sintética para ese caso y otra para negar un JWT ya emitido después de
-retirar la pertenencia simulada. Ninguna sustituye la revocación real de Supabase.
+retirar la pertenencia simulada. La revocación real de Supabase se comprobó
+posteriormente con una cuenta separada, como se registra arriba.
 
 Para diagnosticar una interrupción futura: revisar primero el estado del proyecto
 en el panel; después probar salud/JWKS, login y `/auth/session` en ese orden. No
@@ -100,14 +175,14 @@ correo confirmado, perfil y membership de EAG con rol administrador o analista.
 Las credenciales se introducen únicamente en la UI local, nunca en Git, mensajes,
 capturas o logs. El flujo login → rol devuelto por API → recarga con sesión
 persistida → logout ya se probó con la cuenta analista dummy. El login y la
-persistencia se comprobaron también con la cuenta administradora dummy. Falta
-la revocación real; las pruebas offline descritas abajo no sustituyen ese paso.
+persistencia se comprobaron también con la cuenta administradora dummy. La
+revocación real se probó después con una cuenta sintética separada.
 
 La recuperación de contraseña queda pendiente y no se implementa. Se conservan
-backend de invitaciones, revocación, auditoría, roles, RLS y migraciones. SMTP,
-reenvío de invitaciones (501), validación de revocación/refresh con el proveedor
-y revisión humana mantienen sus pendientes. No se fusiona el PR ni se cierra la
-issue; la aceptación de EAG no se presume.
+backend de invitaciones, revocación, auditoría, roles, RLS y migraciones. La
+revocación y el rechazo del refresh se comprobaron con el proveedor real. SMTP,
+reenvío de invitaciones (501) y revisión humana mantienen sus pendientes. No se
+fusiona el PR ni se cierra la issue; la aceptación de EAG no se presume.
 
 ## Evidencia histórica conservada
 
