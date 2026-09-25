@@ -1,8 +1,9 @@
 # Diagnóstico de autenticación MVP-04
 
 Alcance: issue #4, rama `codex/mvp-04-auth-roles`, PR #19 hacia `dev`.
-El login y logout reales de la cuenta analista dummy se comprobaron el
-2026-09-24. La revocación real y la revisión humana siguen pendientes.
+El login y logout reales de la cuenta analista dummy, y el login real de la
+cuenta administradora dummy, se comprobaron el 2026-09-24. La revocación real
+y la revisión humana siguen pendientes.
 
 ## Login real del analista y diagnóstico JWKS (2026-09-24)
 
@@ -23,8 +24,11 @@ conservó la sesión. Se cerró sesión desde la UI y otra recarga mostró el
 formulario anónimo. Son comprobaciones reales contra el proveedor dummy, sin
 guardar ni mostrar contraseña o token.
 
-No se probó aún el login del administrador ni una revocación real de sesión o
-membership. Esas comprobaciones y la revisión humana impiden cerrar la issue.
+Después, el usuario inició sesión con la cuenta administradora dummy en la
+misma UI. Se observó "Sesión autenticada" y rol `administrador` devuelto por
+el servidor; una recarga conservó la sesión. No se leyó ni guardó la contraseña
+o el JWT. No se probó aún una revocación real de sesión o membership. Esa
+comprobación y la revisión humana impiden cerrar la issue.
 
 ## Incidente de disponibilidad del dummy (2026-09-24)
 
@@ -95,9 +99,9 @@ Un administrador autorizado debe provisionar el usuario dummy con contraseña,
 correo confirmado, perfil y membership de EAG con rol administrador o analista.
 Las credenciales se introducen únicamente en la UI local, nunca en Git, mensajes,
 capturas o logs. El flujo login → rol devuelto por API → recarga con sesión
-persistida → logout ya se probó con la cuenta analista dummy. Falta comprobar
-el administrador y la revocación real; las pruebas offline descritas abajo no
-sustituyen esos pasos.
+persistida → logout ya se probó con la cuenta analista dummy. El login y la
+persistencia se comprobaron también con la cuenta administradora dummy. Falta
+la revocación real; las pruebas offline descritas abajo no sustituyen ese paso.
 
 La recuperación de contraseña queda pendiente y no se implementa. Se conservan
 backend de invitaciones, revocación, auditoría, roles, RLS y migraciones. SMTP,
