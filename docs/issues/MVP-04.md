@@ -17,6 +17,11 @@ Las dependencias requieren su resultado técnico aceptado. En MVP-02 se puede av
 - Añadir migraciones, auditoría inicial de accesos/cambios y estrategia RLS cuando aplique.
 - Documentar configuración segura y recuperación/revocación de acceso.
 
+El reenvío de invitaciones se sigue en [#22](https://github.com/SamuLopez1/EAGingenieros/issues/22).
+La ruta actual responde 501 de forma explícita. EAG debe confirmar este alcance
+en la revisión de MVP-04; el flujo de **primera** invitación sigue dentro de
+esta issue y requiere prueba con un buzón controlado.
+
 ## Criterios de aceptación
 
 - [ ] Acceso anónimo a rutas protegidas devuelve 401; rol sin permiso devuelve 403.

@@ -89,8 +89,10 @@ mostró acceso propio permitido y acceso ajeno/anónimo bloqueado.
 El dummy ya tiene cuentas sintéticas provisionadas con contraseña, correo
 confirmado, perfil y membership de EAG. Se comprobaron login, recarga y logout
 reales del analista, y login y recarga reales del administrador, sin registrar
-credenciales. La revocación real y la recuperación de contraseña quedan
-pendientes; no se añade registro, recuperación, OAuth ni MFA.
+credenciales. Una revocación real con cuenta sintética separada negó el mismo
+JWT en la API y RLS, y rechazó el refresh (véase `AUTH_DIAGNOSTICO.md`). La
+recuperación de contraseña queda pendiente; no se añade registro, recuperación,
+OAuth ni MFA.
 SMTP y el flujo administrativo de invitaciones conservan sus pendientes propios.
 
 La creación de invitaciones reales usa `POST /auth/v1/invite` desde el backend
@@ -99,4 +101,5 @@ y auditoría mediante RPC. Una revocación primero elimina la membresía y despu
 el usuario de Auth; por tanto bloquea RLS y el backend antes de retirar tokens de
 refresh. Los access tokens ya emitidos siguen siendo JWT válidos hasta `exp`,
 aunque no pueden resolver una membresía en esta aplicación. Supabase no documenta
-un reenvío de invitación seguro; la ruta devuelve 501 en vez de simularlo.
+un reenvío de invitación seguro; la ruta devuelve 501 en vez de simularlo. Se
+sigue por separado en la issue #22, sujeto a aceptación humana del alcance.

@@ -63,9 +63,8 @@ Ese intento no se ejecutó. Se requiere un buzón autorizado para continuar.
 
 1. EAG confirma la aceptación técnica de la dependencia MVP-03 y el entorno
    Supabase definitivo (o declara que el dummy basta para aceptar MVP-04).
-2. EAG decide explícitamente si el reenvío de invitación forma parte de MVP-04.
-   Hoy la ruta devuelve 501. Si se excluye, registrar el trabajo en una issue
-   separada; si se incluye, implementar y probar antes de aceptar.
+2. El reenvío se registró en la issue #22 y la ruta actual devuelve 501. EAG
+   confirma durante la revisión que este alcance se puede aceptar por separado.
 3. Para validar invitación completa, preparar un buzón de prueba controlado y
    autorizar su uso. Un administrador invita desde la API; comprobar Auth,
    perfil, membresía y auditoría, recibir y aceptar el correo, iniciar sesión,
@@ -181,8 +180,9 @@ revocación real se probó después con una cuenta sintética separada.
 La recuperación de contraseña queda pendiente y no se implementa. Se conservan
 backend de invitaciones, revocación, auditoría, roles, RLS y migraciones. La
 revocación y el rechazo del refresh se comprobaron con el proveedor real. SMTP,
-reenvío de invitaciones (501) y revisión humana mantienen sus pendientes. No se
-fusiona el PR ni se cierra la issue; la aceptación de EAG no se presume.
+reenvío de invitaciones (501, issue #22) y revisión humana mantienen sus
+pendientes. No se fusiona el PR ni se cierra la issue; la aceptación de EAG no
+se presume.
 
 ## Evidencia histórica conservada
 

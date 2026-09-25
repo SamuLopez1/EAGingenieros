@@ -13,7 +13,8 @@ representa un dato de negocio ni un usuario real.
 | Consultar la sesión y su pertenencia a EAG | No, 401 | Solo la propia | Solo la propia | Solo para operación controlada |
 | Consultar datos de otra organización | No | No, 403 | No, 403 | Solo en procedimientos de backend explícitos |
 | Iniciar sesión con correo y contraseña | Solo ante Supabase, con cuenta previamente provisionada; sin registro público | Para su propia cuenta | Para su propia cuenta | No aplica |
-| Crear, reenviar o revocar invitaciones | No | No, 403 | Sí, solo mediante API de backend | Sí, únicamente después de la autorización API y auditoría |
+| Crear o revocar invitaciones | No | No, 403 | Sí, solo mediante API de backend | Sí, únicamente después de la autorización API y auditoría |
+| Reenviar invitaciones | No | No, 403 | Pendiente: API devuelve 501 | Pendiente: issue #22 |
 | Cambiar rol, organización o permisos propios | No | No | No | No directamente: solo flujo de backend revisado |
 | Escribir membresías, perfiles, invitaciones o auditoría mediante cliente | No | No | No | Sí, con validaciones de backend |
 | Leer membresías, invitaciones y auditoría | No | Solo su membresía | Solo la organización EAG | Solo operación controlada |
@@ -46,13 +47,15 @@ datos empresariales reales de EAG ni SMTP configurado. En el proyecto dummy hay
 dos cuentas sintéticas con perfil y membresía. Se comprobó login, persistencia
 y logout reales del analista, y login y persistencia reales del administrador.
 La segunda migración de RPCs se aplicó sin filas de resultado; creación de
-invitaciones y revocación reales mediante la API siguen sin prueba E2E.
+invitaciones y revocación reales mediante la API siguen sin prueba E2E. La
+revocación mediante el gateway real sí se comprobó con un JWT y cuenta
+sintética; véase `AUTH_DIAGNOSTICO.md`.
 
 La creación y revocación tienen una pasarela Supabase implementada cuando el backend
 recibe su clave de servicio local; sus pruebas de API usan mocks y no demuestran
 todavía el flujo real de invitación. El reenvío no se simula: la API devuelve 501
-porque Supabase no documenta una operación de reenvío de invitaciones. Esta es
-una limitación que debe resolverse con EAG antes de cerrar la issue como completa.
+porque Supabase no documenta una operación de reenvío de invitaciones. El
+trabajo se sigue en #22, sujeto a aceptación humana del alcance de MVP-04.
 
 La validación JWT local comprueba firma y expiración, pero no consulta Supabase
 en cada solicitud para saber si una sesión se revocó. Por ello una revocación
