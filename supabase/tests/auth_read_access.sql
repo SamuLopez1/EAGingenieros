@@ -15,6 +15,9 @@ begin
     if has_table_privilege('anon', 'public.invitations', 'SELECT') then
         raise exception 'Anonymous role can read invitations';
     end if;
+    if has_table_privilege('anon', 'public.audit_events', 'SELECT') then
+        raise exception 'Anonymous role can read audit events';
+    end if;
     if has_table_privilege('authenticated', 'public.invitations', 'UPDATE')
         or has_table_privilege('authenticated', 'public.audit_events', 'INSERT') then
         raise exception 'Authenticated role has administrative write privileges';
@@ -55,6 +58,36 @@ begin
     end if;
     if exists (select 1 from public.profiles where id <> auth.uid()) then
         raise exception 'Another user profile is visible';
+    end if;
+    if exists (select 1 from public.invitations)
+        or exists (select 1 from public.audit_events) then
+        raise exception 'Analyst can read administrator-only records';
+    end if;
+end;
+$$;
+
+reset role;
+do $$
+declare
+    dummy_user_id uuid;
+begin
+    select id into dummy_user_id
+    from auth.users
+    where email = 'eag.admin.dummy@example.com';
+    if dummy_user_id is null then
+        raise exception 'This check requires the synthetic administrator user';
+    end if;
+    perform set_config('request.jwt.claim.sub', dummy_user_id::text, true);
+end;
+$$;
+set local role authenticated;
+do $$
+begin
+    if (select count(*) from public.organization_memberships) < 2 then
+        raise exception 'Administrator cannot read EAG memberships';
+    end if;
+    if not exists (select 1 from public.audit_events) then
+        raise exception 'Administrator cannot read EAG audit events';
     end if;
 end;
 $$;
