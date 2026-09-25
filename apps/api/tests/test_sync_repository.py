@@ -3,8 +3,8 @@
 Cubren el criterio central de MVP-05: repetir una ejecución no duplica
 oportunidades, y un fallo parcial queda visible y reanudable.
 
-No requieren base de datos ni red: usan la implementación en memoria y un
-cliente SECOP con respuestas sintéticas.
+No requieren red: usan respuestas sintéticas y, para comprobar el cursor
+persistido, tablas SQLite desechables.
 """
 
 from __future__ import annotations
@@ -13,8 +13,13 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import Session
+
+from app.db.models import Base, Opportunity, SyncCursor, SyncRun
 from app.db.repository import (
     InMemoryOpportunityRepository,
+    SqlOpportunityRepository,
     SyncRunTracker,
     UpsertResult,
 )
@@ -23,9 +28,11 @@ from app.secop.client import (
     PROCESSES_DATASET,
     OpportunityRecord,
     QuotaExceededError,
+    SecopClient,
     SecopError,
     UpstreamUnavailableError,
 )
+from tests.test_secop_client import FakeHttp, FakeResponse, row
 
 _UNSET = object()
 
@@ -405,3 +412,71 @@ def test_run_is_committed_before_the_network_call() -> None:
     # Y lo esencial: la apertura ya estaba confirmada antes de tocar la red,
     # que es lo que se verificó en el constructor.
     assert calls.count("commit") >= 2
+
+
+def test_partial_failure_persists_source_offset_and_resumes_in_sqlite() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(
+        engine,
+        tables=[Opportunity.__table__, SyncRun.__table__, SyncCursor.__table__],
+    )
+    with Session(engine, expire_on_commit=False) as session:
+        repo = SqlOpportunityRepository(session)
+        first_http = FakeHttp(
+            [
+                FakeResponse([row(id_del_proceso=None), row(id_del_proceso="B")]),
+                FakeResponse({}, status_code=429),
+            ]
+        )
+        first = SyncService(
+            client=SecopClient(http=first_http, page_size=2),
+            repository=repo,
+            tracker=SyncRunTracker(session, dataset=PROCESSES_DATASET),
+            session=session,
+        ).run()
+
+        assert first.outcome == "failed"
+        assert first.records_created == 1
+        assert first.records_seen == 1
+        assert first.last_offset == 2
+        assert first.requests_made == 2
+        assert session.get(SyncRun, first.run_id).last_offset == 2
+        assert session.get(SyncCursor, PROCESSES_DATASET).last_offset == 2
+
+        class CheckingHttp(FakeHttp):
+            def get(self, url: str, *, params: Mapping[str, Any], timeout: float) -> Any:
+                assert not session.in_transaction()
+                return super().get(url, params=params, timeout=timeout)
+
+        second_http = CheckingHttp([FakeResponse([row(id_del_proceso="C")])])
+        second = SyncService(
+            client=SecopClient(http=second_http, page_size=2),
+            repository=repo,
+            tracker=SyncRunTracker(session, dataset=PROCESSES_DATASET),
+            session=session,
+        ).run(SyncRequest(resume=True))
+
+        assert second.outcome == "completed"
+        assert second.records_created == 1
+        assert second.last_offset == 3
+        assert second_http.calls[0]["params"]["$offset"] == 2
+        assert repo.count() == 2
+    engine.dispose()
+
+
+def test_reading_history_does_not_insert_a_running_execution() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine, tables=[SyncRun.__table__, SyncCursor.__table__])
+    with Session(engine) as session:
+        service = SyncService(
+            client=FakeSecopClient([]),  # type: ignore[arg-type]
+            repository=InMemoryOpportunityRepository(),
+            session=session,
+        )
+
+        assert service.recent_runs() == []
+        assert session.execute(select(SyncRun)).scalars().all() == []
+        assert service.run().outcome == "completed"
+        assert service.run().outcome == "completed"
+        assert len(service.recent_runs()) == 2
+    engine.dispose()

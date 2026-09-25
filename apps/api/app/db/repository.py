@@ -333,9 +333,23 @@ class SyncRunTracker:
             last_offset=last_offset,
         )
 
-    def fail(self, *, error_kind: str, error_detail: str) -> SyncOutcome:
+    def fail(
+        self,
+        *,
+        error_kind: str,
+        error_detail: str,
+        result: UpsertResult,
+        requests_made: int,
+        last_offset: int,
+    ) -> SyncOutcome:
         self._run.outcome = "failed"
         self._run.finished_at = datetime.now(UTC)
+        self._run.records_seen = result.total
+        self._run.records_created = result.created
+        self._run.records_updated = result.updated
+        self._run.records_skipped = result.skipped
+        self._run.requests_made = requests_made
+        self._run.last_offset = last_offset
         # Se acota el detalle: el mensaje de una excepción puede incluir la URL
         # consultada y no debe crecer sin límite en la base de datos.
         self._run.error_kind = error_kind[:64]
@@ -344,6 +358,13 @@ class SyncRunTracker:
         return SyncOutcome(
             run_id=self.run_id,
             outcome="failed",
+            records_seen=result.total,
+            records_created=result.created,
+            records_updated=result.updated,
+            records_unchanged=result.unchanged,
+            records_skipped=result.skipped,
+            requests_made=requests_made,
+            last_offset=last_offset,
             error_kind=error_kind,
             error_detail=error_detail[:500],
         )
@@ -359,6 +380,13 @@ class SyncRunTracker:
             # insertar la misma clave primaria y una fallaría.
             self._session.commit()
         return found
+
+    def resume_offset(self) -> int:
+        """Lee el cursor sin retener una transacción durante la llamada de red."""
+
+        offset = self.cursor().last_offset
+        self._session.commit()
+        return offset
 
     def advance_cursor(self, offset: int) -> None:
         cursor = self.cursor()

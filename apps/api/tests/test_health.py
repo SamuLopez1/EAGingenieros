@@ -66,6 +66,21 @@ def test_cors_is_not_enabled_by_default() -> None:
     assert "access-control-allow-origin" not in response.headers
 
 
+def test_cors_allows_authorization_for_protected_opportunities() -> None:
+    client = TestClient(create_app(Settings(cors_allowed_origins=["http://localhost:5173"])))
+    response = client.options(
+        "/api/v1/opportunities",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "Authorization",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "authorization" in response.headers["access-control-allow-headers"].lower()
+
+
 def test_cors_origins_use_the_documented_comma_separated_environment_value(monkeypatch) -> None:
     monkeypatch.setenv(
         "EAG_CORS_ALLOWED_ORIGINS", "http://localhost:5173,https://app.example.invalid"

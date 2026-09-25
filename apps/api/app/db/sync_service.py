@@ -62,6 +62,7 @@ class SyncService:
         self._client = client
         self._repository = repository
         self._tracker = tracker
+        self._tracker_supplied = tracker is not None
         self._dataset = dataset
         # Solo se usa para consultar el historial de ejecuciones. La escritura
         # de oportunidades pasa siempre por el repositorio.
@@ -70,7 +71,12 @@ class SyncService:
     def _start_offset(self, request: SyncRequest) -> int:
         if not request.resume or self._tracker is None:
             return 0
-        return self._tracker.cursor().last_offset
+        return self._tracker.resume_offset()
+
+    def _next_offset(self, start_offset: int, records: list[OpportunityRecord]) -> int:
+        # El cliente real cuenta filas de origen, incluidas las descartadas.
+        # Los dobles antiguos solo exponen registros normalizados.
+        return getattr(self._client, "next_offset", start_offset + len(records))
 
     def run(self, request: SyncRequest | None = None) -> SyncOutcome:
         """Ejecuta una sincronización completa y devuelve su resultado.
@@ -80,6 +86,8 @@ class SyncService:
         muestre un éxito falso.
         """
 
+        if self._session is not None and not self._tracker_supplied:
+            self._tracker = SyncRunTracker(self._session, dataset=self._dataset)
         active = request or SyncRequest()
         start_offset = self._start_offset(active)
 
@@ -105,7 +113,7 @@ class SyncService:
         unique = deduplicate(records)
         result = self._repository.upsert_many(unique)
 
-        last_offset = start_offset + len(records)
+        last_offset = self._next_offset(start_offset, records)
         if self._tracker is not None:
             outcome = self._tracker.succeed(
                 result,
@@ -141,24 +149,39 @@ class SyncService:
         pierde y la siguiente ejecución lo reconoce como existente.
         """
 
-        if records:
-            self._repository.upsert_many(deduplicate(records))
-
-        outcome = self._record_failure(kind, detail)
+        result = self._repository.upsert_many(deduplicate(records)) if records else UpsertResult()
+        last_offset = self._next_offset(start_offset, records)
+        outcome = self._record_failure(
+            kind, detail, result=result, last_offset=last_offset
+        )
         outcome.notes.append(
             f"se conservaron {len(records)} registros leídos antes del fallo"
         )
-        if records:
-            outcome.last_offset = start_offset + len(records)
+        if self._tracker is not None and last_offset > start_offset:
+            self._tracker.advance_cursor(last_offset)
         return outcome
 
-    def _record_failure(self, kind: str, detail: str) -> SyncOutcome:
+    def _record_failure(
+        self, kind: str, detail: str, *, result: UpsertResult, last_offset: int
+    ) -> SyncOutcome:
         if self._tracker is not None:
-            return self._tracker.fail(error_kind=kind, error_detail=detail)
+            return self._tracker.fail(
+                error_kind=kind,
+                error_detail=detail,
+                result=result,
+                requests_made=self._client.requests_made,
+                last_offset=last_offset,
+            )
         return SyncOutcome(
             run_id=None,
             outcome="failed",
+            records_seen=result.total,
+            records_created=result.created,
+            records_updated=result.updated,
+            records_unchanged=result.unchanged,
+            records_skipped=result.skipped,
             requests_made=self._client.requests_made,
+            last_offset=last_offset,
             error_kind=kind,
             error_detail=detail,
         )
@@ -170,6 +193,17 @@ class SyncService:
             return []
         statement = select(SyncRun).order_by(SyncRun.id.desc()).limit(limit)
         return list(self._session.execute(statement).scalars().all())
+
+    def close(self) -> None:
+        """Libera conexión SQL y cliente HTTP de esta petición."""
+
+        close_client = getattr(self._client, "close", None)
+        try:
+            if callable(close_client):
+                close_client()
+        finally:
+            if self._session is not None:
+                self._session.close()
 
     def empty_result(self) -> UpsertResult:
         """Resultado vacío, útil para respuestas sin cambios."""

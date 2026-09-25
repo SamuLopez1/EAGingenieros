@@ -163,7 +163,9 @@ def normalise_record(raw: Mapping[str, Any], *, fetched_at: datetime) -> Opportu
     como si fuera válido.
     """
 
-    source_id = _first_str(raw, "id_del_proceso", "referencia_del_proceso")
+    # La referencia es otro identificador y puede cambiar. Sustituir con ella
+    # un id_del_proceso ausente rompería la clave natural entre ejecuciones.
+    source_id = _first_str(raw, "id_del_proceso")
     if source_id is None:
         return None
 
@@ -197,6 +199,8 @@ class SyncPage:
     # Filas que devolvió la fuente antes de normalizar. Determina si hay más
     # páginas, porque una fila descartada no debe interpretarse como final.
     rows_received: int = 0
+    # Posición posterior a cada registro válido dentro de la página cruda.
+    record_offsets: tuple[int, ...] = ()
 
     @property
     def next_offset(self) -> int:
@@ -253,10 +257,22 @@ class SecopClient:
         self._max_requests = max_requests
         self._dataset = dataset
         self._requests_made = 0
+        self._next_offset = 0
 
     @property
     def requests_made(self) -> int:
         return self._requests_made
+
+    @property
+    def next_offset(self) -> int:
+        """Primera fila de origen aún no procesada por esta iteración."""
+
+        return self._next_offset
+
+    def close(self) -> None:
+        close_http = getattr(self._http, "close", None)
+        if callable(close_http):
+            close_http()
 
     def _endpoint(self) -> str:
         return f"{SOCRATA_ROOT}/resource/{self._dataset}.json"
@@ -340,12 +356,14 @@ class SecopClient:
 
             fetched_at = datetime.now(UTC)
             records = []
-            for row in payload:
+            record_offsets = []
+            for index, row in enumerate(payload):
                 if not isinstance(row, Mapping):
                     raise ResponseShapeError("se esperaba un objeto por registro")
                 record = normalise_record(row, fetched_at=fetched_at)
                 if record is not None:
                     records.append(record)
+                    record_offsets.append(offset + index + 1)
 
             # El avance se calcula sobre las filas recibidas, no sobre los
             # registros normalizados: descartar una fila sin identificador no
@@ -355,6 +373,7 @@ class SecopClient:
                 offset=offset,
                 page_size=size,
                 rows_received=len(payload),
+                record_offsets=tuple(record_offsets),
             )
 
         raise last_error or UpstreamUnavailableError("fallo desconocido al consultar SECOP")
@@ -369,6 +388,7 @@ class SecopClient:
         """Itera páginas hasta agotar resultados, el límite o la cuota."""
 
         offset = start_offset
+        self._next_offset = start_offset
         emitted = 0
         while True:
             remaining = None if limit is None else limit - emitted
@@ -376,16 +396,16 @@ class SecopClient:
                 return
             size = self._page_size if remaining is None else min(self._page_size, remaining)
             page = self.fetch_page(offset=offset, filters=filters, page_size=size)
-            if not page.records:
-                return
-            for record in page.records:
+            for record, next_offset in zip(page.records, page.record_offsets, strict=True):
                 # El límite se aplica al emitir, no solo al pedir: la página
                 # puede traer más filas de las que faltan cuando la fuente
                 # ignora $limit o devuelve un bloque mayor.
                 if limit is not None and emitted >= limit:
                     return
+                self._next_offset = next_offset
                 yield record
                 emitted += 1
+            self._next_offset = page.next_offset
             # Una página incompleta significa que se agotaron los resultados.
             if not page.is_full_page:
                 return

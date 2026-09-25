@@ -9,9 +9,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
+from uuid import UUID
 
 from fastapi.testclient import TestClient
 
+from app.auth.principal import Principal, Role, get_current_principal
 from app.config import Settings
 from app.db.repository import InMemoryOpportunityRepository
 from app.db.sync_service import SyncService
@@ -49,6 +51,8 @@ class FakeClient:
 def client_with(
     pages: list[list[Any]] | Exception,
     repository: InMemoryOpportunityRepository | None = None,
+    *,
+    role: Role | None = Role.ADMINISTRATOR,
 ) -> tuple[TestClient, InMemoryOpportunityRepository]:
     """Construye la aplicación con persistencia y cliente sintéticos."""
 
@@ -59,24 +63,44 @@ def client_with(
         client=FakeClient(pages),  # type: ignore[arg-type]
         repository=repo,
     )
+    if role is not None:
+        app.dependency_overrides[get_current_principal] = lambda: Principal(
+            subject_id=UUID(int=1),
+            organization_id=UUID(int=2),
+            role=role,
+            user_id=1,
+        )
     return TestClient(app), repo
 
 
-# --- Autenticación pendiente ----------------------------------------------
+# --- Autorización ----------------------------------------------------------
 
 
-def test_routes_are_reachable_without_authentication_for_now() -> None:
-    """Deja constancia de que las rutas de negocio aún no están protegidas.
+def test_anonymous_access_is_denied_before_sync_or_read() -> None:
+    client, repo = client_with([[make_record("A")]], role=None)
 
-    La autenticación existe en el PR #19 y no se ha fusionado. Esta prueba fija
-    el estado actual a propósito: cuando la protección se integre, debe fallar y
-    obligar a actualizarla, en lugar de que la ausencia de autorización pase
-    inadvertida.
-    """
+    assert client.get("/api/v1/opportunities").status_code == 401
+    assert client.get("/api/v1/opportunities/1").status_code == 401
+    assert client.get("/api/v1/sync-runs").status_code == 401
+    assert client.post("/api/v1/sync-runs").status_code == 401
+    assert repo.count() == 0
 
-    client, _ = client_with([[make_record("A")]])
+
+def test_analyst_can_read_but_cannot_trigger_sync() -> None:
+    client, repo = client_with([[make_record("A")]], role=Role.ANALYST)
+    calls = 0
+
+    def forbidden_factory() -> SyncService:
+        nonlocal calls
+        calls += 1
+        raise AssertionError("no se debe crear una ejecución")
+
+    client.app.state.sync_service_factory = forbidden_factory
 
     assert client.get("/api/v1/opportunities").status_code == 200
+    assert client.post("/api/v1/sync-runs").status_code == 403
+    assert repo.count() == 0
+    assert calls == 0
 
 
 # --- Listado ---------------------------------------------------------------
@@ -250,6 +274,12 @@ def test_routes_report_503_when_persistence_is_missing() -> None:
     app = create_app(Settings(environment="test"))
     app.state.opportunity_repository = None
     app.state.sync_service_factory = None
+    app.dependency_overrides[get_current_principal] = lambda: Principal(
+        subject_id=UUID(int=1),
+        organization_id=UUID(int=2),
+        role=Role.ADMINISTRATOR,
+        user_id=1,
+    )
 
     with TestClient(app) as client:
         assert client.get("/api/v1/opportunities").status_code == 503

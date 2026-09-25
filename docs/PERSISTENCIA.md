@@ -18,8 +18,9 @@ duplicado.
 | `sync_runs` | Historial de ejecuciones, para que un fallo parcial quede visible |
 | `sync_cursors` | Posición por conjunto de datos, para reanudar sin reiniciar |
 
-No se crean tablas de documentos, análisis ni informes: corresponden a issues
-posteriores y adelantarlas acoplaría el modelo a decisiones aún no tomadas.
+La migración propia de MVP-05 crea solo estas tres tablas. El PR #21 también
+contiene cambios de documentos, análisis, perfil y UI ajenos a esta issue; esa
+mezcla debe resolverse en revisión sin sobrescribir trabajo existente.
 
 ### Decisiones de modelado
 
@@ -118,6 +119,47 @@ cd apps/api
 
 ## Siguiente paso
 
-Exponer las oportunidades por API y construir el listado, filtros y detalle
-(issue MVP-06), que es lo que convierte los datos persistidos en algo que el
-analista puede usar.
+## Continuación acotada de MVP-05 (2026-09-25)
+
+**Dependencias.** La issue #2 está cerrada y su spike comprobó con llamadas
+reales una muestra de `p6dx-8zbt`, su esquema, paginación y un filtro. No
+confirmó la relación con `dmgg-8hin`, la cobertura de pliegos ni la zona
+horaria de las fechas. MVP-04 (#4) sigue abierta y el PR #19 no está fusionado.
+La autorización de este PR usa su propia dependencia de identidad; la
+integración con el proveedor y la matriz definitivos de MVP-04 está pendiente.
+
+**Correcciones.** `id_del_proceso` es obligatorio para la clave natural; una
+`referencia_del_proceso` aislada no lo sustituye. Una página llena de filas
+descartadas ya no detiene la paginación. El cursor cuenta posiciones de la
+respuesta original, incluidas filas descartadas, y en un fallo parcial guarda
+el avance y los contadores tras persistir lo leído. La lectura del cursor se
+confirma antes de consultar la red, evitando retener una transacción abierta.
+Las rutas de oportunidades requieren identidad y la sincronización manual
+requiere rol administrador. Las pruebas de autorización usan identidades
+sintéticas; no son un login real ni validan la integración con #4.
+Una consulta del historial ya no crea una ejecución `running`, y el servicio
+se construye después del control de rol para que un 403 no escriba en la base.
+Cada petición cierra su sesión SQL y cliente HTTP. CORS admite la cabecera
+`Authorization` únicamente desde los orígenes configurados.
+
+**Comprobaciones offline en el worktree aislado:**
+
+```powershell
+cd apps/api
+.\.venv\Scripts\python.exe -m pytest -q tests/test_secop_client.py tests/test_sync_repository.py tests/test_api_opportunities.py tests/test_health.py
+.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\python.exe -m mypy app
+```
+
+Resultado: 87 pruebas específicas correctas; Ruff y mypy correctos. Se
+instalaron en un `.venv` ignorado las versiones de `requirements.lock` para
+ejecutarlas. El suite completo falló en dos pruebas de extracción ajenas a
+MVP-05 porque el ejecutable Tesseract no está instalado; sus demás pruebas
+terminaron sin fallos. No se repitió la prueba de red contra SECOP ni la
+prueba PostgreSQL histórica de este PR durante esta continuación.
+
+**Pendiente para aceptación.** Confirmar con EAG el campo y la zona horaria que
+permiten detectar cambios tardíos, validar la ventana incremental de siete
+días y el horario diario antes de activarlos, probar cuota real con una
+consulta acotada, integrar autorización con MVP-04 y revisar el exceso de
+alcance del PR #21. CI verde y pruebas con mocks no cierran esas decisiones.

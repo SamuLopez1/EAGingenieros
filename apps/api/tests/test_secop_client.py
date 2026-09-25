@@ -103,6 +103,15 @@ def test_normalise_returns_none_without_identifier() -> None:
     assert record is None
 
 
+def test_reference_does_not_replace_missing_source_identifier() -> None:
+    record = normalise_record(
+        row(id_del_proceso=None, referencia_del_proceso="REF-1"),
+        fetched_at=datetime.now(UTC),
+    )
+
+    assert record is None
+
+
 def test_missing_date_is_unknown_not_zero() -> None:
     record = normalise_record(row(fecha_de_publicacion_del=None), fetched_at=datetime.now(UTC))
 
@@ -233,6 +242,28 @@ def test_a_discarded_row_does_not_end_pagination_early() -> None:
     # La segunda consulta debe partir de las filas recibidas (2), no de los
     # registros normalizados (1).
     assert http.calls[1]["params"]["$offset"] == 2
+
+
+def test_a_full_page_of_discarded_rows_does_not_end_pagination() -> None:
+    invalid = row(id_del_proceso=None)
+    http = FakeHttp([FakeResponse([invalid, invalid]), FakeResponse([row(id_del_proceso="B")])])
+    client = client_with(http, page_size=2)
+
+    records = list(client.iter_records())
+
+    assert [record.source_id for record in records] == ["B"]
+    assert http.calls[1]["params"]["$offset"] == 2
+    assert client.next_offset == 3
+
+
+def test_limit_keeps_offset_at_last_emitted_source_row() -> None:
+    http = FakeHttp(
+        [FakeResponse([row(id_del_proceso=None), row(id_del_proceso="B"), row(id_del_proceso="C")])]
+    )
+    client = client_with(http, page_size=3)
+
+    assert [record.source_id for record in client.iter_records(limit=1)] == ["B"]
+    assert client.next_offset == 2
 
 
 def test_iter_records_respects_limit() -> None:

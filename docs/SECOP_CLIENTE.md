@@ -84,7 +84,11 @@ sobre las filas recibidas.
   desplaza el día en los bordes; debe confirmarse con EAG qué zona aplica el
   conjunto antes de usar fechas en comparaciones.
 
-## Siguiente paso
+## Continuación de MVP-05
 
-Persistir las oportunidades sincronizadas de forma idempotente, usando
-`natural_key` (`p6dx-8zbt:<id_del_proceso>`) como clave de deduplicación.
+La persistencia usa `natural_key` (`p6dx-8zbt:<id_del_proceso>`) como clave de
+deduplicación. Una fila sin `id_del_proceso` se descarta aunque traiga
+`referencia_del_proceso`: ambos campos no son intercambiables. El cursor de
+reanudación avanza por filas crudas, no por registros normalizados, y una
+página llena de filas descartadas no detiene el recorrido. Estas reglas se
+probaron offline el 2026-09-25; no constituyen una nueva prueba de red.

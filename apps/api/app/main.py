@@ -33,7 +33,7 @@ from app.documents.validation import ClamAvScanner
 from app.rag.embeddings import build_embedder
 from app.rag.ingestion import IngestionService
 from app.rag.retriever import Retriever
-from app.secop.client import PROCESSES_DATASET, HttpxClient, SecopClient
+from app.secop.client import HttpxClient, SecopClient
 
 
 def build_persistence(
@@ -92,10 +92,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(
         title=active_settings.app_name,
         version=active_settings.app_version,
-        description=(
-            "API del MVP de preevaluación de licitaciones. "
-            "Las rutas de negocio aún no están protegidas por autenticación."
-        ),
+        description="API del MVP de preevaluación de licitaciones.",
     )
 
     if active_settings.cors_origins:
@@ -104,7 +101,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             allow_origins=active_settings.cors_origins,
             allow_credentials=False,
             allow_methods=["GET", "POST"],
-            allow_headers=["Accept", "Content-Type"],
+            allow_headers=["Accept", "Authorization", "Content-Type"],
         )
 
     repository, session_factory, dispose = build_persistence(active_settings)
@@ -256,15 +253,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             max_requests=active_settings.secop_max_requests,
         )
         session = session_factory() if session_factory else None
-        tracker = None
-        if session is not None:
-            from app.db.repository import SyncRunTracker
-
-            tracker = SyncRunTracker(session, dataset=PROCESSES_DATASET, trigger="manual")
         return SyncService(
             client=client,
             repository=repository,
-            tracker=tracker,
             session=session,
         )
 

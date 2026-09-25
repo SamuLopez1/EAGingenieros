@@ -1,16 +1,12 @@
 """Rutas HTTP de oportunidades y sincronización.
 
-Estado actual del acceso: estas rutas **no están protegidas todavía**. El
-trabajo de autenticación existe en el PR #19 y aún no se ha fusionado; hasta
-que lo haga, la aplicación no debe exponerse fuera de un entorno local.
-
-Se deja constancia explícita en lugar de dar por hecho que la protección
-llegará: una ruta de negocio sin autorización no debe pasar inadvertida.
+Todas las rutas requieren una identidad resuelta por el servidor. La
+sincronización manual queda reservada al administrador.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -21,10 +17,16 @@ from app.api.contracts import (
     SyncRunSummary,
     SyncTriggerResponse,
 )
+from app.auth.principal import Principal, Role, get_current_principal, require_roles
 from app.db.repository import OpportunityRepository
 from app.db.sync_service import SyncRequest, SyncService
 
-router = APIRouter(prefix="/api/v1", tags=["oportunidades"])
+router = APIRouter(
+    prefix="/api/v1",
+    tags=["oportunidades"],
+    dependencies=[Depends(get_current_principal)],
+)
+AdministratorDep = Annotated[Principal, Depends(require_roles(Role.ADMINISTRATOR))]
 
 
 def get_repository(request: Request) -> OpportunityRepository:
@@ -42,7 +44,7 @@ def get_repository(request: Request) -> OpportunityRepository:
     return repository
 
 
-def get_sync_service(request: Request) -> SyncService:
+def get_sync_service(request: Request) -> Iterator[SyncService]:
     factory = cast(
         "Callable[[], SyncService] | None",
         getattr(request.app.state, "sync_service_factory", None),
@@ -52,7 +54,11 @@ def get_sync_service(request: Request) -> SyncService:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="La sincronización no está configurada.",
         )
-    return factory()
+    service = factory()
+    try:
+        yield service
+    finally:
+        service.close()
 
 
 RepositoryDep = Annotated[OpportunityRepository, Depends(get_repository)]
@@ -107,6 +113,7 @@ def get_opportunity(opportunity_id: int, repository: RepositoryDep) -> Opportuni
     responses={503: {"description": "La sincronización no está configurada"}},
 )
 def trigger_sync(
+    administrator: AdministratorDep,
     sync_service: SyncServiceDep,
     limit: Annotated[int | None, Query(ge=1, le=1000)] = None,
     resume: bool = False,
@@ -118,6 +125,7 @@ def trigger_sync(
     tras un 500 haría perder el detalle de qué ocurrió.
     """
 
+    del administrator
     outcome = sync_service.run(SyncRequest(limit=limit, resume=resume))
     return SyncTriggerResponse(
         outcome=outcome.outcome,
