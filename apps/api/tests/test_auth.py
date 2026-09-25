@@ -7,6 +7,7 @@ import httpx
 import jwt
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from fastapi.testclient import TestClient
+from jwt import PyJWKClientConnectionError
 
 from app.auth import AuthServices, JwtValidator, Membership, Role, SupabaseMembershipResolver
 from app.config import Settings
@@ -186,6 +187,25 @@ def test_paused_provider_response_fails_closed_with_503_offline(monkeypatch) -> 
 
     assert response.status_code == 503
     assert "test-only-publishable-key" not in response.text
+
+
+def test_unavailable_jwks_returns_503_instead_of_invalid_token_401() -> None:
+    class UnavailableSigningKey:
+        def __call__(self, encoded_token: str) -> object:
+            del encoded_token
+            raise PyJWKClientConnectionError("JWKS temporarily unavailable")
+
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    services = AuthServices(
+        validator=JwtValidator(make_settings(), signing_key_loader=UnavailableSigningKey()),
+        memberships=FakeMemberships({}),
+    )
+    client = TestClient(create_app(make_settings(), auth_services=services))
+
+    response = client.get("/auth/session", headers=bearer(make_token(private_key, uuid4())))
+
+    assert response.status_code == 503
+    assert "JWKS temporarily unavailable" not in response.text
 
 
 def test_admin_can_create_resend_and_revoke_with_fake_gateway_offline() -> None:

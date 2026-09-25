@@ -1,7 +1,30 @@
 # Diagnóstico de autenticación MVP-04
 
 Alcance: issue #4, rama `codex/mvp-04-auth-roles`, PR #19 hacia `dev`.
-No se considera probado el login real ni se cierran los criterios E2E.
+El login y logout reales de la cuenta analista dummy se comprobaron el
+2026-09-24. La revocación real y la revisión humana siguen pendientes.
+
+## Login real del analista y diagnóstico JWKS (2026-09-24)
+
+Después de introducir las credenciales únicamente en la UI local, Supabase
+creó una sesión, pero `/auth/session` devolvió 401 y la UI mostró un error de
+autorización. El diagnóstico del backend identificó
+`PyJWKClientConnectionError`: el proceso API local, iniciado sin acceso de red,
+no podía descargar el JWKS público. Una petición `urllib` desde ese mismo
+entorno falló con `URLError`; la consulta pública JWKS con acceso de red
+respondió con una clave ES256. No se registraron JWT ni claves.
+
+Se corrigió la clasificación del error: si falla la descarga de JWKS, la API
+devuelve 503 y no confunde indisponibilidad del proveedor con token inválido
+(401). Una prueba offline cubre esa distinción. Con la API local ejecutada con
+acceso de red, el mismo JWT produjo HTTP 200 en `/auth/session` y la UI mostró
+"Sesión autenticada" con rol `analista` asignado por el servidor. Una recarga
+conservó la sesión. Se cerró sesión desde la UI y otra recarga mostró el
+formulario anónimo. Son comprobaciones reales contra el proveedor dummy, sin
+guardar ni mostrar contraseña o token.
+
+No se probó aún el login del administrador ni una revocación real de sesión o
+membership. Esas comprobaciones y la revisión humana impiden cerrar la issue.
 
 ## Incidente de disponibilidad del dummy (2026-09-24)
 
@@ -11,8 +34,9 @@ progress` y `Coming up`, y confirmó `Restoration complete`. Durante el arranque
 JWKS respondió HTTP 502; después respondió 200 y Auth health respondió 200 con
 la clave publicable. El panel terminó mostrando `Healthy`. Una consulta agregada
 en SQL Editor confirmó las dos
-cuentas sintéticas con correo confirmado, perfil y rol esperado. Esto aún no
-demuestra login/logout con contraseña ni revocación real.
+cuentas sintéticas con correo confirmado, perfil y rol esperado. En ese momento
+esto aún no demostraba login/logout con contraseña ni revocación real; el
+login/logout analista se comprobó posteriormente como se indica arriba.
 
 Se descubrió además un defecto de permisos independiente de la pausa: con la
 clave de servidor, Auth Admin devolvió 200 pero `GET` de `invitations` en
@@ -65,14 +89,15 @@ administrativa sigue cubierta; no se solicita magic link desde la UI.
 No se consultaron valores de `.env`, claves, JWT, cuentas ni datos de Supabase
 para implementar este cambio. No se crearon ni modificaron cuentas o contraseñas.
 
-## Único paso manual previo al login real
+## Provisionamiento y validaciones restantes
 
 Un administrador autorizado debe provisionar el usuario dummy con contraseña,
 correo confirmado, perfil y membership de EAG con rol administrador o analista.
 Las credenciales se introducen únicamente en la UI local, nunca en Git, mensajes,
-capturas o logs. Después se debe probar, con autorización: login → rol devuelto
-por API → recarga con sesión persistida → logout. Hasta entonces, **login real
-con contraseña pendiente**; las pruebas descritas abajo son offline.
+capturas o logs. El flujo login → rol devuelto por API → recarga con sesión
+persistida → logout ya se probó con la cuenta analista dummy. Falta comprobar
+el administrador y la revocación real; las pruebas offline descritas abajo no
+sustituyen esos pasos.
 
 La recuperación de contraseña queda pendiente y no se implementa. Se conservan
 backend de invitaciones, revocación, auditoría, roles, RLS y migraciones. SMTP,

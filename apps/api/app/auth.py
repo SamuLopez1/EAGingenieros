@@ -17,7 +17,7 @@ import httpx
 import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jwt import InvalidTokenError, PyJWKClient, PyJWKClientError
+from jwt import InvalidTokenError, PyJWKClient, PyJWKClientConnectionError, PyJWKClientError
 
 from app.config import Settings
 
@@ -48,7 +48,7 @@ class AuthorizationError(Exception):
 
 
 class AuthenticationConfigurationError(Exception):
-    """Faltan valores externos para validar tokens o resolver pertenencias."""
+    """La validación o consulta de pertenencias no está disponible."""
 
 
 class MembershipResolver(Protocol):
@@ -91,6 +91,8 @@ class JwtValidator:
                 options={"require": ["exp", "iss", "aud", "sub"]},
             )
             return UUID(str(claims["sub"]))
+        except PyJWKClientConnectionError as error:
+            raise AuthenticationConfigurationError from error
         except (InvalidTokenError, PyJWKClientError, KeyError, TypeError, ValueError) as error:
             raise AuthenticationError from error
 
@@ -186,7 +188,7 @@ def get_current_principal(request: Request, credentials: BearerCredentials) -> P
     except AuthenticationConfigurationError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="La autenticación no está configurada.",
+            detail="La verificación de autenticación no está disponible.",
         ) from None
     except AuthorizationError:
         raise HTTPException(
