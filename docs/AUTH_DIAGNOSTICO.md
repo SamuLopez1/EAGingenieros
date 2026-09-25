@@ -9,7 +9,8 @@ El panel de Supabase mostró `eag-mvp-auth-dummy` en estado **paused**. Se usó
 `Resume project` con autorización del usuario. El panel pasó por `Restoration in
 progress` y `Coming up`, y confirmó `Restoration complete`. Durante el arranque
 JWKS respondió HTTP 502; después respondió 200 y Auth health respondió 200 con
-la clave publicable. Una consulta agregada en SQL Editor confirmó las dos
+la clave publicable. El panel terminó mostrando `Healthy`. Una consulta agregada
+en SQL Editor confirmó las dos
 cuentas sintéticas con correo confirmado, perfil y rol esperado. Esto aún no
 demuestra login/logout con contraseña ni revocación real.
 
