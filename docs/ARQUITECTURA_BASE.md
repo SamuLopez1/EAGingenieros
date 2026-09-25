@@ -86,12 +86,11 @@ También se aplicó `20260908000000_auth_read_grants.sql`: otorga SELECT en perf
 membership y organización a `authenticated`, sujeto a RLS. La prueba SQL real
 mostró acceso propio permitido y acceso ajeno/anónimo bloqueado.
 
-**Pendiente manual antes de probar login real:** un administrador autorizado debe
-provisionar el dummy con contraseña, correo confirmado, perfil y membership de
-EAG con rol administrador o analista. No se cambian cuentas, contraseñas ni datos
-en esta tarea. El login con contraseña, recarga y logout reales siguen pendientes
-hasta completar ese paso y probarlos con autorización. La recuperación de
-contraseña queda pendiente; no se añade registro, recuperación, OAuth ni MFA.
+El dummy ya tiene cuentas sintéticas provisionadas con contraseña, correo
+confirmado, perfil y membership de EAG. Se comprobaron login, recarga y logout
+reales del analista, y login y recarga reales del administrador, sin registrar
+credenciales. La revocación real y la recuperación de contraseña quedan
+pendientes; no se añade registro, recuperación, OAuth ni MFA.
 SMTP y el flujo administrativo de invitaciones conservan sus pendientes propios.
 
 La creación de invitaciones reales usa `POST /auth/v1/invite` desde el backend

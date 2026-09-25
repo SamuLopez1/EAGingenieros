@@ -42,12 +42,15 @@ migración inicial y se comprobó que su JWKS público usa `ES256`. Se desactiv�
 el registro público y se configuró la URL local autorizada. Una consulta de
 metadatos confirmó RLS habilitado y una política en cada una de las tablas
 `profiles`, `organization_memberships`, `invitations` y `audit_events`. No hay
-datos de EAG, SMTP, claves locales, usuarios ni credenciales de prueba
-autorizadas. La segunda migración de RPCs se aplicó sin filas de resultado; la
-prueba E2E permanece pendiente.
+datos empresariales reales de EAG ni SMTP configurado. En el proyecto dummy hay
+dos cuentas sintéticas con perfil y membresía. Se comprobó login, persistencia
+y logout reales del analista, y login y persistencia reales del administrador.
+La segunda migración de RPCs se aplicó sin filas de resultado; creación de
+invitaciones y revocación reales mediante la API siguen sin prueba E2E.
 
-La creación y revocación usan ahora una pasarela Supabase real cuando el backend
-recibe su clave de servicio local. El reenvío no se simula: la API devuelve 501
+La creación y revocación tienen una pasarela Supabase implementada cuando el backend
+recibe su clave de servicio local; sus pruebas de API usan mocks y no demuestran
+todavía el flujo real de invitación. El reenvío no se simula: la API devuelve 501
 porque Supabase no documenta una operación de reenvío de invitaciones. Esta es
 una limitación que debe resolverse con EAG antes de cerrar la issue como completa.
 
