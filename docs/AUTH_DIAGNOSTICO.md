@@ -1,10 +1,56 @@
 # Diagnóstico de autenticación MVP-04
 
-Alcance: issue #4, rama `codex/mvp-04-auth-roles`, PR #19 hacia `dev`.
-El login y logout reales de la cuenta analista dummy, y el login real de la
-cuenta administradora dummy, se comprobaron el 2026-09-24. La revocación real
-se comprobó el 2026-09-25. La invitación con entrega y aceptación por correo,
-y la revisión humana, siguen pendientes.
+Este diagnóstico corresponde a la issue #4 y al PR #19 hacia `dev`.
+La entrega y aceptación de la primera invitación por correo siguen pendientes.
+El reenvío se sigue en la issue #22.
+
+## Revisión del PR #19 (2026-11-22)
+
+Se verificó el código de `cb9c258` en un worktree aislado. La dependencia #3
+continúa abierta en GitHub. Las pruebas offline se ejecutaron primero, con
+fixtures sintéticas y sin configuración del proveedor en el worktree.
+
+| Comprobación | Resultado |
+| --- | --- |
+| Offline y CI | Ruff y mypy correctos, 25 pruebas de API, 22 de web y 11 del spike aprobadas. Lint, typecheck y build web correctos. Los jobs `api` y `web` de GitHub pasaron en `cb9c258`. |
+| Configuración real de Supabase dummy | Auth health, JWKS y configuración pública respondieron 200. El proveedor confirmó registro desactivado y acceso con email habilitado. La clave de servicio se mantuvo en backend y el navegador recibió configuración publicable. |
+| Analista en Chrome | Login de Supabase 200, API por proxy 200 con el rol y la organización esperados, sesión conservada tras recarga, logout 204 y formulario anónimo tras recarga. Supabase rechazó el refresh de esa sesión con 400. |
+| Autorización y RLS reales | Anónimo directo y por proxy, y bearer inválido, obtuvieron 401. Un JWT válido sin membresía, una organización ajena y una acción administrativa del analista devolvieron 403. Con el JWT de analista, RLS mostró una membresía propia y cero filas para la membresía de otra cuenta y para la invitación. |
+| Revocación real | Antes de revocar, la API respondió 200. La pasarela ejecutó la RPC y eliminó el usuario Auth. Con el mismo JWT, la API respondió 403 y RLS devolvió cero filas. El refresh devolvió 400 y la comprobación Auth Admin devolvió 404. Se retiraron las dos cuentas temporales de Auth y quedaron los registros sintéticos de auditoría. |
+| Administrador y revocación por HTTP | La asignación del rol a la fixture temporal por PostgREST devolvió 403. El control del navegador perdió su sesión al intentar verificar el acceso al panel. Quedan pendientes el nuevo login/logout administrativo y el recorrido de éxito por `DELETE /auth/invitations/{invitation_id}`. El login administrativo de septiembre y las pruebas offline de la ruta se conservan como evidencia separada. |
+| Primera invitación | Sigue sin identificarse un buzón de prueba autorizado. La creación de fixtures usó Auth Admin con confirmación previa, sin envío de correo. Entrega y aceptación quedan pendientes. |
+
+Comandos ejecutados desde el worktree del PR con el entorno Python existente.
+La ejecución local con Supabase usó solo el proyecto dummy y procesos en
+`127.0.0.1`. El wrapper y su comprobación Playwright son archivos locales en
+`tmp`, ignorados por Git. Emiten estados y recuentos sin credenciales ni tokens.
+
+```powershell
+$env:PYTHONPATH = 'apps/api'
+$py = '../../apps/api/.venv/Scripts/python.exe'
+& $py -m ruff check apps/api
+& $py -m mypy --config-file apps/api/pyproject.toml apps/api/app
+& $py -m pytest -c apps/api/pyproject.toml apps/api/tests
+python -m unittest discover -s tests -p 'test_*.py'
+npm run lint --prefix apps/web
+npm run typecheck --prefix apps/web
+npm run test --prefix apps/web
+npm run build --prefix apps/web
+& $py ../verify_mvp04_pr19.py
+```
+
+El wrapper devolvió código 3 por la validación administrativa incompleta.
+El diagnóstico de red y el control de los procesos locales se ejecutaron con
+acceso autorizado. Pytest mantuvo dos avisos de deprecación de dependencias.
+
+### Hallazgo de revisión en la revocación parcial
+
+Una fixture offline de HTTP reprodujo una RPC exitosa seguida de HTTP 500 al
+borrar el usuario en Auth. Se retiró la membresía, pero el reintento volvió a
+ejecutar la RPC y recibió un rechazo porque la invitación ya estaba revocada.
+La pasarela intentó borrar el usuario una sola vez. La API mapea ambos fallos a
+503. Queda pendiente permitir que el reintento complete el borrado en Auth y
+probar ese caso, con la membresía retirada durante todo el proceso.
 
 ## Revocación real controlada (2026-09-25)
 
