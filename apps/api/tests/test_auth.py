@@ -11,7 +11,12 @@ from jwt import PyJWKClientConnectionError
 
 from app.auth import AuthServices, JwtValidator, Membership, Role, SupabaseMembershipResolver
 from app.config import Settings
-from app.invitations import InvitationResendUnsupported, InvitationService
+from app.invitations import (
+    InvitationGateway,
+    InvitationResendUnsupported,
+    InvitationService,
+    SupabaseInvitationGateway,
+)
 from app.main import create_app
 
 ISSUER = "https://example.supabase.co/auth/v1"
@@ -67,7 +72,7 @@ def make_settings() -> Settings:
 def make_client(
     private_key: rsa.RSAPrivateKey,
     memberships: dict[UUID, Membership],
-    invitations: FakeInvitations | None = None,
+    invitations: InvitationGateway | None = None,
 ) -> TestClient:
     settings = make_settings()
     signing_key_loader = FixedSigningKey(private_key.public_key())
@@ -107,6 +112,80 @@ def make_token(
 
 def bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+def test_administrator_retries_partial_revocation_without_restoring_access(monkeypatch) -> None:
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    admin, analyst, other_admin, target, invitation = (uuid4() for _ in range(5))
+    delete_statuses = iter((500, 204, 404))
+    calls: list[str] = []
+    memberships = {
+        admin: Membership(organization_id=ORGANIZATION_ID, role=Role.ADMINISTRATOR),
+        analyst: Membership(organization_id=ORGANIZATION_ID, role=Role.ANALYST),
+        other_admin: Membership(organization_id=OTHER_ORGANIZATION_ID, role=Role.ADMINISTRATOR),
+        target: Membership(organization_id=ORGANIZATION_ID, role=Role.ANALYST),
+    }
+
+    def fake_request(method: str, url: str, **kwargs: object) -> httpx.Response:
+        calls.append(method)
+        if method == "GET":
+            assert url.endswith("/rest/v1/invitations")
+            params = kwargs["params"]
+            assert isinstance(params, dict)
+            organization = params["organization_id"]
+            assert params == {
+                "id": f"eq.{invitation}",
+                "organization_id": organization,
+                "select": "provider_user_id",
+            }
+            if organization == f"eq.{OTHER_ORGANIZATION_ID}":
+                return httpx.Response(200, json=[])
+            assert organization == f"eq.{ORGANIZATION_ID}"
+            return httpx.Response(200, json=[{"provider_user_id": str(target)}])
+        if method == "POST":
+            assert url.endswith("/rest/v1/rpc/revoke_eag_invitation")
+            assert kwargs["json"] == {
+                "p_invitation_id": str(invitation),
+                "p_organization_id": str(ORGANIZATION_ID),
+                "p_actor_id": str(admin),
+            }
+            memberships.pop(target, None)
+            return httpx.Response(204)
+        assert method == "DELETE"
+        assert url.endswith(f"/auth/v1/admin/users/{target}")
+        assert target not in memberships
+        status_code = next(delete_statuses)
+        if status_code == 404:
+            return httpx.Response(404, json={"error_code": "user_not_found"})
+        return httpx.Response(status_code)
+
+    monkeypatch.setattr("app.invitations.httpx.request", fake_request)
+    gateway = SupabaseInvitationGateway(Settings(
+        supabase_url="https://example.supabase.co",
+        supabase_service_role_key="test-only-service-key",
+        supabase_invite_redirect_url="http://127.0.0.1:5173",
+    ))
+    client = make_client(private_key, memberships, gateway)
+    path = f"/auth/invitations/{invitation}"
+    admin_headers = bearer(make_token(private_key, admin))
+    target_headers = bearer(make_token(private_key, target))
+
+    assert client.get("/auth/session", headers=target_headers).status_code == 200
+    assert client.delete(path, headers=admin_headers).status_code == 503
+    assert client.get("/auth/session", headers=target_headers).status_code == 403
+
+    assert client.delete(path).status_code == 401
+    assert client.delete(path, headers=bearer(make_token(private_key, analyst))).status_code == 403
+    other_headers = bearer(make_token(private_key, other_admin))
+    assert client.delete(path, headers=other_headers).status_code == 403
+    assert calls == ["GET", "POST", "DELETE", "GET"]
+
+    for _ in range(2):
+        result = client.delete(path, headers=admin_headers)
+        assert result.status_code == 200
+        assert result.json() == {"invitation_id": str(invitation), "status": "revoked"}
+        assert client.get("/auth/session", headers=target_headers).status_code == 403
+    assert calls[4:] == ["GET", "POST", "DELETE", "GET", "POST", "DELETE"]
 
 
 def test_protected_route_returns_401_without_token() -> None:

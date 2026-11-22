@@ -141,6 +141,28 @@ def test_revoke_and_resend_do_not_cross_organization_boundaries(monkeypatch) -> 
         )
 
 
+@pytest.mark.parametrize(
+    ("status_code", "payload"),
+    [(404, {"error_code": "route_not_found"}), (404, None), (302, None)],
+)
+def test_revoke_fails_if_auth_does_not_confirm_the_user_is_missing(
+    monkeypatch, status_code: int, payload: object | None
+) -> None:
+    def fake_request(method: str, url: str, **_kwargs: object) -> httpx.Response:
+        if method == "GET":
+            return response(method, url, 200, [{"provider_user_id": str(PROVIDER_USER_ID)}])
+        if method == "POST":
+            return response(method, url, 204)
+        assert method == "DELETE"
+        return response(method, url, status_code, payload)
+
+    monkeypatch.setattr("app.invitations.httpx.request", fake_request)
+    with pytest.raises(InvitationProviderUnavailable):
+        make_gateway().revoke(
+            invitation_id=INVITATION_ID, organization_id=ORGANIZATION_ID, actor_id=ACTOR_ID
+        )
+
+
 def test_resend_is_explicitly_unsupported_when_the_invitation_belongs_to_eag(monkeypatch) -> None:
     def fake_request(method: str, url: str, **kwargs: object) -> httpx.Response:
         del kwargs

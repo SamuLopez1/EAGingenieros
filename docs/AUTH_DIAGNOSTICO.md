@@ -43,14 +43,50 @@ El wrapper devolvió código 3 por la validación administrativa incompleta.
 El diagnóstico de red y el control de los procesos locales se ejecutaron con
 acceso autorizado. Pytest mantuvo dos avisos de deprecación de dependencias.
 
-### Hallazgo de revisión en la revocación parcial
+### Reintento de una revocación parcial
 
-Una fixture offline de HTTP reprodujo una RPC exitosa seguida de HTTP 500 al
-borrar el usuario en Auth. Se retiró la membresía, pero el reintento volvió a
-ejecutar la RPC y recibió un rechazo porque la invitación ya estaba revocada.
-La pasarela intentó borrar el usuario una sola vez. La API mapea ambos fallos a
-503. Queda pendiente permitir que el reintento complete el borrado en Auth y
-probar ese caso, con la membresía retirada durante todo el proceso.
+La prueba offline con PostgreSQL 17.6 reprodujo el rechazo de la RPC original
+(`active invitation not found`) al reintentar después de retirar la
+membresía y conservar el usuario de Auth. La prueba HTTP, con Auth simulado,
+reprodujo el 503 adicional si Auth indicaba que el usuario ya estaba ausente.
+
+La migración `20261122000000_idempotent_invitation_revocation.sql`
+mantiene la RPC y sus permisos. Cada llamada vuelve a verificar el rol y la
+organización. Un bloqueo de fila serializa las llamadas sobre la misma
+invitación. El primer intento retira la membresía y registra la auditoría.
+Si la invitación ya está revocada, la pasarela puede volver a intentar el
+borrado en Auth. Un HTTP 404 con `user_not_found` confirma que Auth ya no
+tiene ese usuario. Las demás respuestas fallidas mantienen el 503.
+[Códigos de Supabase Auth](https://supabase.com/docs/guides/auth/debugging/error-codes).
+
+Con la corrección, PostgreSQL confirmó una sola auditoría de revocación,
+la membresía ausente y el rechazo a un analista y una organización ajena.
+La prueba HTTP confirmó 503 tras el borrado simulado fallido, 200 al
+reintentar y 200 con el usuario ya ausente. El JWT anterior recibió 403
+durante toda la recuperación. Una petición anónima recibió 401 y ni el
+analista ni un administrador de otra organización pudieron borrar en Auth.
+
+Desde la raíz del repositorio, con Docker iniciado y la imagen local
+`postgres:17.6-bookworm`, el runner crea una base desechable sin red, aplica
+las migraciones y ejecuta la fixture SQL. El primer comando reproduce el
+fallo original y devuelve código 3. El segundo debe devolver 0.
+
+```powershell
+python supabase/tests/run_auth_revocation_offline.py --legacy
+python supabase/tests/run_auth_revocation_offline.py
+
+$env:PYTHONPATH = 'apps/api'
+& apps/api/.venv/Scripts/python.exe -m pytest -c apps/api/pyproject.toml apps/api/tests
+& apps/api/.venv/Scripts/python.exe -m ruff check apps/api
+& apps/api/.venv/Scripts/python.exe -m mypy --config-file apps/api/pyproject.toml apps/api/app
+```
+
+Pasaron 29 pruebas de API, Ruff y mypy. Pytest emitió los dos avisos de
+deprecación ya registrados.
+
+La corrección se comprobó offline. Queda aplicar la migración en el entorno
+autorizado antes de validar allí los reintentos. La entrega y aceptación de
+la primera invitación siguen pendientes de un buzón de prueba autorizado.
 
 ## Revocación real controlada (2026-09-25)
 

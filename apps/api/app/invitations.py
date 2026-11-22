@@ -80,6 +80,7 @@ class SupabaseInvitationGateway:
         *,
         params: dict[str, str] | None = None,
         json: dict[str, object] | None = None,
+        allow_missing_auth_user: bool = False,
     ) -> httpx.Response:
         try:
             response = httpx.request(
@@ -93,9 +94,16 @@ class SupabaseInvitationGateway:
             )
         except httpx.HTTPError as error:
             raise InvitationProviderUnavailable from error
-        if response.is_error:
-            raise InvitationProviderUnavailable
-        return response
+        if response.is_success:
+            return response
+        if allow_missing_auth_user and response.status_code == 404:
+            try:
+                payload: object = response.json()
+            except ValueError as error:
+                raise InvitationProviderUnavailable from error
+            if isinstance(payload, dict) and payload.get("error_code") == "user_not_found":
+                return response
+        raise InvitationProviderUnavailable
 
     @staticmethod
     def _provider_user_id(response: httpx.Response) -> UUID:
@@ -183,7 +191,9 @@ class SupabaseInvitationGateway:
                 "p_actor_id": str(actor_id),
             },
         )
-        self._request("DELETE", f"/auth/v1/admin/users/{provider_user_id}")
+        self._request(
+            "DELETE", f"/auth/v1/admin/users/{provider_user_id}", allow_missing_auth_user=True
+        )
 
 
 @dataclass
