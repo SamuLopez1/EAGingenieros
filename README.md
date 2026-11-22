@@ -38,7 +38,7 @@ npm run typecheck --prefix apps/web
 npm run test --prefix apps/web
 npm run build --prefix apps/web
 
-# Smoke local API -> proxy Vite -> UI
+# Smoke local API -> proxy Vite -> UI (cerrar antes los servidores locales)
 python scripts/smoke_local.py
 ```
 
@@ -49,8 +49,9 @@ permite ningún origen. Para permitir una UI concreta, copiar
 explícitos y no añadir comodines. Consulte [ARQUITECTURA_BASE.md](docs/ARQUITECTURA_BASE.md)
 para el contrato y la generación futura del cliente TypeScript.
 
-El smoke inicia la API desde `apps/api`, por lo que carga el archivo local no
-versionado `apps/api/.env`, si existe, igual que al ejecutarla manualmente.
+El smoke inicia sus propios procesos y requiere libres los puertos locales
+`8000` y `5173`. La API arranca desde `apps/api` y carga el archivo local no
+versionado `apps/api/.env` si existe, igual que en el arranque manual.
 
 Riesgo conocido: esta base no valida cobertura documental de SECOP. Mantiene el
 spike y su recomendación de carga manual complementaria, sin convertirlos en
