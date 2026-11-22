@@ -35,6 +35,22 @@ class Settings(BaseSettings):
     auth_audience: str | None = None
     initial_organization_id: UUID = UUID("00000000-0000-0000-0000-000000000001")
 
+    database_url: SecretStr | None = None
+    socrata_app_token: SecretStr | None = None
+    secop_page_size: int = Field(default=100, ge=1, le=1000)
+    secop_timeout_seconds: float = Field(default=20.0, gt=0, le=120)
+    secop_max_retries: int = Field(default=2, ge=0, le=5)
+    secop_max_requests: int = Field(default=50, ge=1)
+
+    @property
+    def database_is_configured(self) -> bool:
+        return bool(self.database_url and self.database_url.get_secret_value().strip())
+
+    def require_database_url(self) -> str:
+        if self.database_url is None or not self.database_is_configured:
+            raise RuntimeError("EAG_DATABASE_URL se requiere para la sincronización")
+        return self.database_url.get_secret_value()
+
     @field_validator("cors_allowed_origins", mode="before")
     @classmethod
     def split_origins(cls, value: object) -> object:

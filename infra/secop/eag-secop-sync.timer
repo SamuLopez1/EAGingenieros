@@ -1,0 +1,10 @@
+[Unit]
+Description=Sincronización diaria de SECOP II a las 06:00 de Bogotá
+
+[Timer]
+OnCalendar=*-*-* 06:00:00 America/Bogota
+AccuracySec=1min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
