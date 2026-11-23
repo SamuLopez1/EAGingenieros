@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { DossierAnalysis } from "./DossierAnalysis";
+import { DossierComparison } from "./DossierComparison";
 import { DocumentExtraction } from "./DocumentExtraction";
 import { ApiError } from "./api/client";
 import {
@@ -126,6 +127,11 @@ export function DossierSection({
         <>
           <DossierAnalysis key={`${opportunityId}/${revision}`} opportunityId={opportunityId}
             documents={load.data.documents} disabled={busy} />
+          <DossierComparison key={`comparacion/${opportunityId}/${revision}`} opportunityId={opportunityId}
+            role={role} disabled={busy} openDocument={(id) => {
+              const item = load.data.documents.find((doc) => doc.id === id);
+              if (item) void download(item);
+            }} />
           {load.data.missing_pliego ? <p>Falta un pliego disponible. El expediente puede estar incompleto.</p> : null}
           {load.data.official.length ? (
             <ul className="dossier-list" aria-label="Documentos oficiales validados">

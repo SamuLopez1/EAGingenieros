@@ -5,10 +5,11 @@ async (page) => {
   const details = page.getByRole("region", { name: "Detalle de oportunidad" });
   const folder = page.getByRole("region", { name: "Expediente", exact: true });
   const documentList = folder.getByRole("list", { name: "Documentos del expediente" });
+  const withComparison = new URL(page.url()).searchParams.has("qa_comparison");
   const withExtraction = new URL(page.url()).searchParams.has("qa_extraction");
   const nativeText = "Texto sintetico verificable de la oportunidad A, version uno.";
-  function textPdf() {
-    const stream = `BT /F1 12 Tf 20 100 Td (${nativeText}) Tj ET`;
+  function textPdf(label, content = nativeText) {
+    const stream = `BT /F1 12 Tf 20 100 Td (${content}) Tj ET`;
     const objects = [
       "<< /Type /Catalog /Pages 2 0 R >>",
       "<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
@@ -17,7 +18,7 @@ async (page) => {
       `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
       "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
     ];
-    let pdf = "%PDF-1.4\n% EAG-QA-A\n";
+    let pdf = `%PDF-1.4\n% EAG-QA-${label}\n`;
     const offsets = [];
     for (const [index, object] of objects.entries()) {
       offsets.push(pdf.length);
@@ -29,8 +30,18 @@ async (page) => {
     return Buffer.from(pdf + `trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
   }
 
-  const pdf = (label) => withExtraction && label === "A" ? textPdf() : Buffer.from(`%PDF-1.4\n% EAG-QA-${label}\n%%EOF\n`);
-  await page.getByLabel("Correo", { exact: true }).fill("analista@fixture.invalid");
+  const clauses = {
+    A: "Habilitante: Experiencia vial: minimo 1 ano.",
+    B: "Habilitante: Experiencia hidrica: minimo 12 meses.",
+  };
+  const pdf = (label) => withComparison && clauses[label]
+    ? textPdf(label, clauses[label])
+    : withExtraction && label === "A"
+      ? textPdf(label)
+      : Buffer.from(`%PDF-1.4\n% EAG-QA-${label}\n%%EOF\n`);
+  await page.getByLabel("Correo", { exact: true }).fill(
+    withComparison ? "admin@fixture.invalid" : "analista@fixture.invalid",
+  );
   await page.getByLabel("Contraseña", { exact: true }).fill("Synthetic-Only-06");
   await page.getByRole("button", { name: "Iniciar sesión", exact: true }).click();
   await page.getByRole("heading", { name: "Oportunidades", exact: true }).waitFor();
@@ -69,6 +80,58 @@ async (page) => {
     if (enqueue) await panel.getByRole("button", { name: "Extraer texto", exact: true }).click();
     await panel.getByRole("status").filter({ hasText: status }).waitFor();
     return panel;
+  }
+
+  if (withComparison) {
+    const matrix = folder.getByRole("region", { name: "Comparación con EAG" });
+    async function matrixFor(reference, label, expected) {
+      const opportunityId = await open(reference);
+      const document = await add(label, "pliego");
+      await documentList.getByRole("button", { name: "Marcar en revisión" }).click();
+      await documentList.getByText("Disponible · En revisión").waitFor();
+      const panel = await extraction("Extracción disponible", true);
+      await panel.getByText(clauses[label], { exact: true }).waitFor();
+      await matrix.getByRole("button", { name: "Comparar con EAG" }).click();
+      await matrix.getByText(expected, { exact: true }).waitFor();
+      await matrix.getByText(clauses[label], { exact: true }).waitFor();
+      for (const [name, filter] of [
+        ["Abrir evidencia del expediente", `/${document.id}/content`],
+        ["Abrir evidencia EAG · Página 1", "/company-profile/evidence/"],
+      ]) {
+        const download = page.waitForEvent("download");
+        const fetched = page.waitForResponse((res) => res.url().includes(filter) && res.status() === 200);
+        await matrix.getByRole("button", { name, exact: true }).click();
+        await fetched;
+        await (await download).delete();
+      }
+      return opportunityId;
+    }
+    async function approve() {
+      await matrix.getByLabel("Justificación de aprobación").fill("Revisión de fixture sintética");
+      await matrix.getByRole("button", { name: "Aprobar comparación" }).click();
+      await matrix.getByRole("status").filter({ hasText: "Comparación aprobada" }).waitFor();
+    }
+    const a = await matrixFor("003", "A", "Habilitante · Cumple");
+    await matrix.getByRole("button", { name: "Corregir requisito" }).click();
+    await matrix.getByLabel("Resultado").selectOption("cumple_parcialmente");
+    await matrix.getByLabel("Evidencia verificada").selectOption({ label: "Experiencia vial" });
+    await matrix.getByLabel("Justificación", { exact: true }).fill("Corrección con respaldo sintético");
+    await matrix.getByRole("button", { name: "Guardar corrección" }).click();
+    await matrix.getByText("Habilitante · Cumple parcialmente", { exact: true }).waitFor();
+    await approve();
+    await back();
+    const b = await matrixFor("006", "B", "Habilitante · No cumple");
+    assert(a !== b, "El recorrido reabrió la ficha de A");
+    await approve();
+    await add("Adenda-B", "adenda");
+    await matrix.getByRole("status").filter({ hasText: "La aprobación anterior no está vigente" }).waitFor();
+    await back();
+    assert(await open("003") === a, "El retorno abrió una ficha incorrecta");
+    await matrix.getByRole("status").filter({ hasText: "Comparación aprobada" }).waitFor();
+    await matrix.getByText("Habilitante · Cumple parcialmente", { exact: true }).waitFor();
+    await matrix.getByText("Historial de revisión", { exact: true }).click();
+    await matrix.getByText("Corrección con respaldo sintético", { exact: true }).waitFor();
+    return "QA_BROWSER_OK oportunidades=2 comparaciones=2 descargas=4 correcciones=1 aprobaciones=2 invalidaciones=1";
   }
 
   const opportunityA = await open("003");

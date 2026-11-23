@@ -396,3 +396,23 @@ def test_profile_migration_privacy_and_version_history(postgres_engine: Engine) 
         assert client.get(f"{EVIDENCE}/{doc['id']}", headers=ANALYST).content == pdf(
             "perfil PostgreSQL",
         )
+
+
+def test_comparison_migration_joins_dependency_heads_and_protects_audit(postgres_engine) -> None:
+    config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    with postgres_engine.begin() as connection:
+        connection.execute(text("CREATE ROLE anon"))
+        connection.execute(text("CREATE ROLE authenticated"))
+        connection.execute(text("ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO anon"))
+        connection.execute(text("ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO authenticated"))
+    command.upgrade(config, "head")
+    with postgres_engine.connect() as connection:
+        version = connection.scalar(text("SELECT version_num FROM alembic_version"))
+        assert version == "20261122000006"
+        rows = connection.execute(text("""
+            SELECT relrowsecurity, has_table_privilege('anon', oid, 'SELECT'),
+                   has_table_privilege('authenticated', oid, 'SELECT')
+            FROM pg_class
+            WHERE relname IN ('comparison_dossier_revisions', 'comparison_revisions')
+        """)).all()
+        assert rows == [(True, False, False)] * 2

@@ -55,6 +55,10 @@ def cached_analysis(
 @router.post("", response_model=Analysis)
 def analyze(scope: DossierDep, tools: ServicesDep, response: Response) -> Analysis:
     response.headers["Cache-Control"] = PRIVATE
+    return analyze_selected(scope, tools)
+
+
+def analyze_selected(scope: DossierDep, tools: ServicesDep) -> Analysis:
     documents = scope.items()
     selected = sorted((doc for doc in documents if doc.under_review), key=lambda doc: str(doc.id))
     keys = {doc.document_key for doc in selected}
