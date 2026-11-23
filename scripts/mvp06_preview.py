@@ -32,7 +32,10 @@ def main() -> None:
     parser.add_argument("--extraction", action="store_true", help="Incluye extracción y fallos en la prueba A/B/A")
     parser.add_argument("--comparison", action="store_true", help="Compara dos expedientes sintéticos")
     parser.add_argument("--staffing", action="store_true", help="Verifica encaje y personal sintético")
+    parser.add_argument("--margin", action="store_true", help="Verifica escenarios de margen sintéticos")
     args = parser.parse_args()
+    if args.margin and not args.staffing:
+        parser.error("--margin requiere --staffing")
     if args.staffing and not args.comparison:
         parser.error("--staffing requiere --comparison")
     if args.comparison and not args.extraction:
@@ -198,6 +201,7 @@ def main() -> None:
                             "urlproceso": {
                                 "url": f"https://community.secop.gov.co/synthetic/SYNTH-{index:03}"
                             },
+                            **({"precio_base": "800"} if args.margin and index == 3 else {}),
                             **validity_cases.get(index, {}),
                         },
                         fetched_at=datetime(2026, 10, 1, tzinfo=UTC),
@@ -454,6 +458,8 @@ def main() -> None:
                 query = "?qa_comparison=1" if args.comparison else "?qa_extraction=1"
                 if args.staffing:
                     query += "&qa_staffing=1"
+                if args.margin:
+                    query += "&qa_margin=1"
                 url = origin + (query if args.extraction else "")
                 subprocess.run([*browser, "open", url, "--browser=chrome"],
                                check=True, stdout=subprocess.DEVNULL, timeout=35, cwd=browser_output)

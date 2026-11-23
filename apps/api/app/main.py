@@ -17,6 +17,7 @@ from app.api.document_routes import DocumentServices
 from app.api.document_routes import router as opportunity_documents_router
 from app.api.extraction_routes import router as extraction_router
 from app.api.filter_routes import router as opportunity_filters_router
+from app.api.margin_routes import router as margin_router
 from app.api.profile_routes import router as company_profile_router
 from app.api.requirements_routes import router as requirements_router
 from app.api.routes import require_eag_member
@@ -135,6 +136,7 @@ def create_app(
     app.include_router(requirements_router)
     app.include_router(comparison_router)
     app.include_router(staffing_router)
+    app.include_router(margin_router)
     app.include_router(company_profile_router)
 
     @app.exception_handler(DocumentError)

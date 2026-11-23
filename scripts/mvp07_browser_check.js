@@ -7,6 +7,7 @@ async (page) => {
   const documentList = folder.getByRole("list", { name: "Documentos del expediente" });
   const withComparison = new URL(page.url()).searchParams.has("qa_comparison");
   const withStaffing = new URL(page.url()).searchParams.has("qa_staffing");
+  const withMargin = new URL(page.url()).searchParams.has("qa_margin");
   const withExtraction = new URL(page.url()).searchParams.has("qa_extraction");
   const nativeText = "Texto sintetico verificable de la oportunidad A, version uno.";
   function textPdf(label, content = nativeText) {
@@ -123,6 +124,62 @@ async (page) => {
       await matrix.getByRole("button", { name: "Aprobar comparación" }).click();
       await matrix.getByRole("status").filter({ hasText: "Comparación aprobada" }).waitFor();
     }
+    async function marginPanel() {
+      const panel = folder.locator("details").filter({
+        has: page.getByText("Escenarios de utilidad y margen", { exact: true }),
+      });
+      await panel.getByText("Escenarios de utilidad y margen", { exact: true }).click();
+      await panel.getByText(/Presupuesto publicado, solo como referencia/).waitFor();
+      return panel;
+    }
+    async function checkMargins() {
+      const panel = await marginPanel();
+      await panel.getByText(/Presupuesto publicado, solo como referencia: 800.00/).waitFor();
+      await panel.getByText("Brechas de personal para presupuestar").click();
+      await panel.getByText(/Residente · 30 % · 2026-12-11/).waitFor();
+      const form = panel.locator("form").filter({ has: page.getByRole("button", { name: "Guardar escenario" }) });
+      async function assumption(label, amount) {
+        const group = form.getByRole("group", { name: label, exact: true });
+        if (amount !== null) await group.getByLabel("Importe").fill(amount);
+        await group.getByLabel("Fuente o supuesto").fill("Fixture sintética autorizada");
+      }
+      async function costs(hiring) {
+        await assumption("Costos directos", "30");
+        await assumption("Costos indirectos", "5");
+        await assumption("Personal interno", "20");
+        await assumption("Contratación adicional", hiring);
+        await assumption("Contingencia", "5");
+      }
+      function card(name) {
+        return panel.getByRole("list", { name: "Escenarios de margen" }).locator(":scope > li")
+          .filter({ has: page.getByRole("heading", { name, exact: true }) });
+      }
+      await panel.getByRole("button", { name: "Nuevo escenario" }).click();
+      await form.getByLabel("Nombre", { exact: true }).fill("Base QA");
+      const income = form.getByRole("group", { name: "Ingreso estimado", exact: true }).getByLabel("Importe");
+      assert(await income.inputValue() === "", "El presupuesto se aplicó sin autorización");
+      await assumption("Ingreso estimado", "100");
+      await costs(null);
+      await form.getByRole("button", { name: "Guardar escenario" }).click();
+      await card("Base QA").getByText("Importes pendientes: Contratación adicional.").waitFor();
+      await card("Base QA").getByRole("button", { name: "Editar escenario" }).click();
+      await assumption("Contratación adicional", "10");
+      await form.getByRole("button", { name: "Guardar escenario" }).click();
+      await card("Base QA").getByText("30,00 %", { exact: true }).waitFor();
+
+      await panel.getByRole("button", { name: "Nuevo escenario" }).click();
+      await form.getByLabel("Nombre", { exact: true }).fill("Adverso QA");
+      await form.getByLabel("Base del ingreso").selectOption("publicado");
+      await form.getByLabel("Justificación y moneda del presupuesto").fill("Referencia sintética en COP.");
+      await costs("900");
+      await form.getByRole("button", { name: "Guardar escenario" }).click();
+      await card("Adverso QA").getByText("-20,00 %", { exact: true }).waitFor();
+      await card("Adverso QA").getByLabel("Nota de revisión").fill("Revisión sintética de Finanzas.");
+      await card("Adverso QA").getByRole("button", { name: "Registrar revisión" }).click();
+      await card("Adverso QA").getByText(/Versión 2 · Revisado/).waitFor();
+      await card("Adverso QA").getByRole("button", { name: "Ver historial" }).click();
+      await card("Adverso QA").getByText("Revisión sintética de Finanzas.", { exact: true }).waitFor();
+    }
     const a = await matrixFor("003", "A", "Habilitante · Cumple");
     if (withStaffing) {
       const staff = matrix.getByRole("region", { name: "Encaje y personal" });
@@ -145,9 +202,15 @@ async (page) => {
     await matrix.getByRole("button", { name: "Guardar corrección" }).click();
     await matrix.getByText("Habilitante · Cumple parcialmente", { exact: true }).waitFor();
     await approve();
+    if (withMargin) await checkMargins();
     await back();
     const b = await matrixFor("006", "B", "Habilitante · No cumple");
     assert(a !== b, "El recorrido reabrió la ficha de A");
+    if (withMargin) {
+      const panel = await marginPanel();
+      assert(await panel.getByRole("list", { name: "Escenarios de margen" }).count() === 0,
+        "Se filtraron los escenarios de otra ficha");
+    }
     if (withStaffing) {
       const staff = matrix.getByRole("region", { name: "Encaje y personal" });
       await staff.getByText("2026-12-01 a 2026-12-15 · Disponibilidad por confirmar", { exact: true }).waitFor();
@@ -163,7 +226,8 @@ async (page) => {
     await matrix.getByText("Historial de revisión", { exact: true }).click();
     await matrix.getByText("Corrección con respaldo sintético", { exact: true }).waitFor();
     return "QA_BROWSER_OK oportunidades=2 comparaciones=2 descargas=4 correcciones=1 aprobaciones=2 invalidaciones=1" +
-      (withStaffing ? " encaje=1 brecha=1 pendiente=1" : "");
+      (withStaffing ? " encaje=1 brecha=1 pendiente=1" : "") +
+      (withMargin ? " escenarios=2 revisiones=1" : "");
   }
 
   const opportunityA = await open("003");
