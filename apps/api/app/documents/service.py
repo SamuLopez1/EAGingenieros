@@ -92,14 +92,15 @@ class IncomingDocument:
 
 
 def inspect_upload(
-    upload: IncomingDocument, settings: Settings, scanner: AntivirusScanner | None
+    data: bytes, settings: Settings, scanner: AntivirusScanner | None,
+    *, filename: str, media_type: str | None,
 ) -> ValidationResult:
-    if upload.data.startswith(b"%PDF-") and b"%%EOF" not in upload.data[-2048:]:
+    if data.startswith(b"%PDF-") and b"%%EOF" not in data[-2048:]:
         raise DocumentError(422, "archivo_corrupto")
     result = validate_upload(
-        upload.data,
-        filename=upload.filename,
-        declared_content_type=upload.media_type,
+        data,
+        filename=filename,
+        declared_content_type=media_type,
         max_bytes=settings.document_max_bytes,
         scanner=scanner,
         require_antivirus=True,
@@ -108,7 +109,7 @@ def inspect_upload(
         raise DocumentError(413, result.reason.value)
     if result.reason is not None and result.reason != QuarantineReason.ANTIVIRUS_UNAVAILABLE:
         raise DocumentError(422, result.reason.value)
-    extension = Path(upload.filename).suffix.lower()
+    extension = Path(filename).suffix.lower()
     if ALLOWED_CONTENT_TYPES.get(result.detected_type or "") != extension:
         raise DocumentError(422, "tipo_no_coincide")
     return result
@@ -157,7 +158,10 @@ class Dossier:
     def save(
         self, upload: IncomingDocument, scanner: AntivirusScanner | None,
     ) -> OpportunityDocument:
-        inspected = inspect_upload(upload, self.settings, scanner)
+        inspected = inspect_upload(
+            upload.data, self.settings, scanner,
+            filename=upload.filename, media_type=upload.media_type,
+        )
         status = "disponible" if inspected.accepted and inspected.scanned else "cuarentena"
         checksum = sha256(upload.data).hexdigest()
         now = utcnow()

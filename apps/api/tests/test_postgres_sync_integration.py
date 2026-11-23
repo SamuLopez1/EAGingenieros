@@ -355,3 +355,44 @@ def test_extraction_migration_blocks_sql_client_roles(postgres_engine: Engine) -
             FROM pg_class WHERE relname = 'document_extractions'
         """)).one()
         assert row == (True, False, False)
+
+
+def test_profile_migration_privacy_and_version_history(postgres_engine: Engine) -> None:
+    from fastapi.testclient import TestClient
+
+    from app.auth import AuthServices
+    from app.main import create_app
+    from tests.test_dossier import ADMIN, ANALYST, Memberships, Scanner, Validator, pdf
+    from tests.test_profile import EVIDENCE, HEADERS, PATH
+
+    config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    with postgres_engine.begin() as connection:
+        connection.execute(text("CREATE ROLE anon"))
+        connection.execute(text("CREATE ROLE authenticated"))
+        connection.execute(text("ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO anon"))
+        connection.execute(text("ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO authenticated"))
+    command.upgrade(config, "20261122000005")
+    with postgres_engine.connect() as connection:
+        rows = connection.execute(text("""
+            SELECT relrowsecurity, has_table_privilege('anon', oid, 'SELECT'),
+                   has_table_privilege('authenticated', oid, 'SELECT')
+            FROM pg_class WHERE relname IN ('company_profile_versions', 'company_profile_evidence')
+        """)).all()
+        assert rows == [(True, False, False)] * 2
+
+    app = create_app(Settings(), auth_services=AuthServices(Validator(), Memberships()))
+    app.state.document_services = replace(app.state.document_services, scanner=Scanner())
+    with TestClient(app) as client:
+        doc = client.post(EVIDENCE, headers=HEADERS, content=pdf("perfil PostgreSQL")).json()
+        entry = {
+            "category": "capacidad", "title": "Capacidad sintética", "status": "verificado",
+            "evidence": [{"document_id": doc["id"], "locator": "Página 1"}],
+        }
+        first = client.put(PATH, headers=ADMIN, json={"base_version": 0, "entries": [entry]})
+        assert first.status_code == 201
+        second = client.put(PATH, headers=ADMIN, json={"base_version": 1, "entries": []})
+        assert second.status_code == 201 and second.json()["entries"] == []
+        assert client.get(f"{PATH}/versions/1", headers=ANALYST).json() == first.json()
+        assert client.get(f"{EVIDENCE}/{doc['id']}", headers=ANALYST).content == pdf(
+            "perfil PostgreSQL",
+        )

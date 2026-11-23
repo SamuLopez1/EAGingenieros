@@ -152,7 +152,10 @@ def list_documents(scope: DossierDep, tools: ServicesDep, response: Response) ->
 
 
 async def incoming_bytes(request: Request, scope: DossierDep) -> bytes:
-    limit = scope.settings.document_max_bytes
+    return await read_upload(request, scope.settings.document_max_bytes)
+
+
+async def read_upload(request: Request, limit: int) -> bytes:
     length = request.headers.get("content-length")
     if length is not None:
         if not length.isascii() or not length.isdecimal() or len(length) > 12:
