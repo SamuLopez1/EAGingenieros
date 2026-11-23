@@ -11,6 +11,7 @@ from app.db import (
     filter_models,  # noqa: F401 - register migration metadata
     margin_models,  # noqa: F401 - register migration metadata
     profile_models,  # noqa: F401 - register migration metadata
+    shortlist_models,  # noqa: F401 - register migration metadata
     staffing_models,  # noqa: F401 - register migration metadata
 )
 from app.db.models import Base

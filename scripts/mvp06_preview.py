@@ -33,7 +33,10 @@ def main() -> None:
     parser.add_argument("--comparison", action="store_true", help="Compara dos expedientes sintéticos")
     parser.add_argument("--staffing", action="store_true", help="Verifica encaje y personal sintético")
     parser.add_argument("--margin", action="store_true", help="Verifica escenarios de margen sintéticos")
+    parser.add_argument("--shortlist", action="store_true", help="Verifica la lista corta sintética")
     args = parser.parse_args()
+    if args.shortlist and not args.margin:
+        parser.error("--shortlist requiere --margin")
     if args.margin and not args.staffing:
         parser.error("--margin requiere --staffing")
     if args.staffing and not args.comparison:
@@ -460,13 +463,15 @@ def main() -> None:
                     query += "&qa_staffing=1"
                 if args.margin:
                     query += "&qa_margin=1"
+                if args.shortlist:
+                    query += "&qa_shortlist=1"
                 url = origin + (query if args.extraction else "")
                 subprocess.run([*browser, "open", url, "--browser=chrome"],
                                check=True, stdout=subprocess.DEVNULL, timeout=35, cwd=browser_output)
                 checked = subprocess.run(
                     [*browser, "run-code", "--filename", check_script],
                     capture_output=True, text=True, encoding="utf-8", errors="replace",
-                    check=False, timeout=90, cwd=browser_output,
+                    check=False, timeout=120 if args.shortlist else 90, cwd=browser_output,
                 )
                 result = re.search(r'^"?QA_BROWSER_OK ([a-z0-9= ]+)"?$', checked.stdout, re.M)
                 if checked.returncode or not result:

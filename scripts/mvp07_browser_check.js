@@ -8,6 +8,7 @@ async (page) => {
   const withComparison = new URL(page.url()).searchParams.has("qa_comparison");
   const withStaffing = new URL(page.url()).searchParams.has("qa_staffing");
   const withMargin = new URL(page.url()).searchParams.has("qa_margin");
+  const withShortlist = new URL(page.url()).searchParams.has("qa_shortlist");
   const withExtraction = new URL(page.url()).searchParams.has("qa_extraction");
   const nativeText = "Texto sintetico verificable de la oportunidad A, version uno.";
   function textPdf(label, content = nativeText) {
@@ -57,10 +58,17 @@ async (page) => {
   await page.getByRole("button", { name: "Iniciar sesión", exact: true }).click();
   await page.getByRole("heading", { name: "Oportunidades", exact: true }).waitFor();
 
-  async function open(reference) {
+  async function open(reference, saveInCatalog = false) {
     await page.getByLabel("Buscar", { exact: true }).fill(`QA-${reference}`);
     await page.getByRole("button", { name: "Aplicar filtros", exact: true }).click();
-    const card = page.getByRole("link", { name: new RegExp(`caso sintético ${reference}$`) });
+    const catalog = page.getByRole("region", { name: "Resultados del catálogo" });
+    const matching = { name: new RegExp(`caso sintético ${reference}$`) };
+    const card = catalog.getByRole("link", matching);
+    if (saveInCatalog) {
+      const row = catalog.getByRole("row").filter({ has: page.getByRole("link", matching) });
+      await row.getByRole("button", { name: "Guardar en lista corta" }).click();
+      await row.getByRole("button", { name: "Quitar de la lista corta", exact: true }).waitFor();
+    }
     await card.click();
     await folder.getByRole("button", { name: "Cargar archivo", exact: true }).waitFor();
     return Number(new URL(page.url()).searchParams.get("opportunity"));
@@ -96,7 +104,7 @@ async (page) => {
   if (withComparison) {
     const matrix = folder.getByRole("region", { name: "Comparación con EAG" });
     async function matrixFor(reference, label, expected) {
-      const opportunityId = await open(reference);
+      const opportunityId = await open(reference, withShortlist && label === "B");
       const document = await add(label, "pliego");
       await documentList.getByRole("button", { name: "Marcar en revisión" }).click();
       await documentList.getByText("Disponible · En revisión").waitFor();
@@ -203,6 +211,10 @@ async (page) => {
     await matrix.getByText("Habilitante · Cumple parcialmente", { exact: true }).waitFor();
     await approve();
     if (withMargin) await checkMargins();
+    if (withShortlist) {
+      await details.getByRole("button", { name: "Guardar en lista corta", exact: true }).click();
+      await details.getByRole("button", { name: "Quitar de la lista corta", exact: true }).waitFor();
+    }
     await back();
     const b = await matrixFor("006", "B", "Habilitante · No cumple");
     assert(a !== b, "El recorrido reabrió la ficha de A");
@@ -225,9 +237,40 @@ async (page) => {
     await matrix.getByText("Habilitante · Cumple parcialmente", { exact: true }).waitFor();
     await matrix.getByText("Historial de revisión", { exact: true }).click();
     await matrix.getByText("Corrección con respaldo sintético", { exact: true }).waitFor();
+    if (withShortlist) {
+      const shortlist = page.getByRole("region", { name: "Lista corta", exact: true });
+      const table = shortlist.getByRole("table", { name: "Comparación de oportunidades guardadas" });
+      async function checkTwo() {
+        await table.getByRole("columnheader", { name: /caso sintético 003/ }).waitFor();
+        await table.getByRole("columnheader", { name: /caso sintético 006/ }).waitFor();
+        assert(await table.getByRole("columnheader").count() === 3, "Se esperaban dos columnas de datos");
+      }
+      await shortlist.getByRole("button", { name: "Comparar lista corta" }).click();
+      await checkTwo();
+      await table.getByText("Margen 30,00 %", { exact: true }).waitFor();
+      await table.getByText("Margen -20,00 %", { exact: true }).waitFor();
+      await table.getByText("Matriz desactualizada. Recalcula en la ficha.", { exact: true }).waitFor();
+      await table.getByText(/Brecha del 30 % · 2026-12-11/).waitFor();
+      await back();
+      await open("009", true);
+      await table.getByRole("columnheader", { name: /caso sintético 009/ }).waitFor();
+      assert(await table.getByRole("columnheader").count() === 4, "Se esperaban tres columnas de datos");
+      await back();
+      await open("012");
+      const fourth = details.getByRole("button", { name: "Guardar en lista corta", exact: true });
+      await fourth.waitFor();
+      assert(await fourth.isDisabled(), "La interfaz permitió una cuarta ficha");
+      await shortlist.getByRole("button", { name: /Quitar .*009.*lista corta/ }).click();
+      await shortlist.getByText("2 oportunidades guardadas.", { exact: true }).waitFor();
+      await page.reload();
+      await shortlist.getByText("2 oportunidades guardadas.", { exact: true }).waitFor();
+      await shortlist.getByRole("button", { name: "Comparar lista corta" }).click();
+      await checkTwo();
+    }
     return "QA_BROWSER_OK oportunidades=2 comparaciones=2 descargas=4 correcciones=1 aprobaciones=2 invalidaciones=1" +
       (withStaffing ? " encaje=1 brecha=1 pendiente=1" : "") +
-      (withMargin ? " escenarios=2 revisiones=1" : "");
+      (withMargin ? " escenarios=2 revisiones=1" : "") +
+      (withShortlist ? " lista=1 columnas=3 recarga=1" : "");
   }
 
   const opportunityA = await open("003");

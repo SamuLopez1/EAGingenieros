@@ -22,6 +22,7 @@ from app.api.profile_routes import router as company_profile_router
 from app.api.requirements_routes import router as requirements_router
 from app.api.routes import require_eag_member
 from app.api.routes import router as opportunities_router
+from app.api.shortlist_routes import router as shortlist_router
 from app.api.staffing_routes import router as staffing_router
 from app.auth import (
     AuthServices,
@@ -137,6 +138,7 @@ def create_app(
     app.include_router(comparison_router)
     app.include_router(staffing_router)
     app.include_router(margin_router)
+    app.include_router(shortlist_router)
     app.include_router(company_profile_router)
 
     @app.exception_handler(DocumentError)

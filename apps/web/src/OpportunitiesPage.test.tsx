@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import OpportunitiesPage from "./OpportunitiesPage";
 import type { Opportunity, OpportunityPage } from "./api/contracts";
 import * as api from "./api/client";
+import { fetchShortlist } from "./api/shortlist";
 
 vi.mock("./api/client", async (original) => ({
   ...(await original<typeof api>()),
@@ -14,6 +15,7 @@ vi.mock("./api/client", async (original) => ({
   deleteFilter: vi.fn(),
   triggerSync: vi.fn(),
 }));
+vi.mock("./api/shortlist", () => ({ fetchShortlist: vi.fn() }));
 const item: Opportunity = {
   id: 42,
   source_id: "SYNTH-42",
@@ -45,6 +47,7 @@ const page: OpportunityPage = {
 
 beforeEach(() => {
   window.history.replaceState(null, "", "/");
+  vi.mocked(fetchShortlist).mockResolvedValue({ revision: 0, items: [] });
   vi.mocked(api.fetchOpportunities).mockResolvedValue(page);
   vi.mocked(api.fetchOpportunity).mockResolvedValue(item);
   vi.mocked(api.fetchFilterOptions).mockResolvedValue({
