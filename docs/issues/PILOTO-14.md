@@ -1,9 +1,9 @@
-# Piloto EAG · Guion de aceptación
+# Evaluación académica · Guion de aceptación
 
 Issue [#14](https://github.com/SamuLopez1/EAGingenieros/issues/14). Estado del
-piloto empresarial **pendiente**. Usar la [bitácora](PILOTO-14-BITACORA.md) en
-el espacio privado de EAG. El [caso de uso](../CASO_DE_USO.md) define la
-revisión humana y la comparación entre métodos.
+ensayo académico con participantes del equipo y una empresa ficticia. Usar
+la [bitácora](PILOTO-14-BITACORA.md) para registrar los resultados observados.
+Los roles de las áreas se representan durante el ejercicio.
 
 ## Preparación
 
@@ -13,16 +13,14 @@ revisión humana y la comparación entre métodos.
 | Comercial y Contratación | Selecciona las oportunidades, asigna analistas y aporta el flujo manual vigente, los filtros y la evidencia de encaje que se usará. |
 | Talento Humano | Entrega disponibilidad autorizada y versionada por cargo, dedicación y periodo. Distingue cobertura verificada, sin cobertura y pendiente de confirmar. |
 | Finanzas | Entrega supuestos, moneda, costos, fuentes y reglas de comparación. Decide cómo tratar impuestos, retenciones y costos de personal. |
-| Operación y Seguridad | Habilitan staging HTTPS, una cuenta analista y una administradora, una identidad de otra organización para pruebas cuando esté disponible y un buzón de prueba autorizado. Verifican migraciones, servicio de extracción, límites y procedimiento de recuperación. |
+| Operación y Seguridad | Habilitan un entorno aislado de ensayo, una cuenta analista y una administradora, una identidad de otra organización para pruebas cuando esté disponible y un buzón de prueba autorizado. Verifican migraciones, servicio de extracción, límites y procedimiento de recuperación. |
 | Facilitador/a y revisor/a | Congelan entradas, entrenan a usuarios con un caso sintético y acuerdan umbrales antes de abrir las corridas. El revisor custodia la referencia y la usa después para evaluar los dos métodos. |
 
-Preparar al menos **20 oportunidades revisadas manualmente** si EAG autoriza
-y aporta esa muestra. Si aporta menos, registrar el número, causas, sesgos y
-alcance de las conclusiones. Elegir dentro de la muestra casos con cierre
-conocido y desconocido, documento oficial y carga manual, PDF escaneado,
-adendas contradictorias, falta de evidencia, brecha de personal y costos
-indispensables faltantes. Un caso alternativo sintético puede ejercitar una
-rama rara en el ensayo técnico y queda fuera de las métricas empresariales.
+Preparar **dos oportunidades públicas de SECOP II** con referencias y fecha de
+consulta, y un perfil empresarial completamente ficticio para ambas. En una,
+acreditar experiencia y disponibilidad. En otra, dejar una brecha de personal
+o un costo indispensable pendiente. Identificar cualquier fixture de catálogo
+o documento por separado y registrar el alcance y las limitaciones de la muestra.
 
 Para cada oportunidad fijar fecha de corte, copia de la vista de catálogo,
 documentos y versiones accesibles, versión del perfil, disponibilidad y
@@ -31,7 +29,7 @@ referencia por campo y requisito, con estado, fuente, versión y localizador.
 Cuando falte evidencia, la referencia conserva ese faltante. Fijar también
 los criterios de determinación de plazos, encaje y margen.
 
-Para la práctica sin datos de EAG, preparar una ficha sintética con
+Para verificar las reglas con datos sintéticos, preparar una ficha sintética con
 pliego que exija un residente al 60 % durante un intervalo conocido y un
 perfil con 40 % confirmado en ese mismo intervalo. La brecha esperada es
 20 puntos porcentuales. En otra ficha omitir la disponibilidad y comprobar
@@ -42,16 +40,15 @@ comprobar que el escenario vuelve a quedar pendiente. Estos valores son
 entradas de entrenamiento.
 
 La muestra, la referencia, los resultados y la bitácora diligenciada quedan
-en el espacio de EAG con acceso limitado. En Git y en los logs usar códigos de
+en el espacio del equipo con acceso limitado. En Git y en los logs usar códigos de
 caso y conteos. Aplicar el [procedimiento de operación](OPERACION-13.md).
-Usar el adaptador offline mientras EAG no autorice expresamente el proveedor
-externo y su tratamiento de datos. Acordar origen, buzón y destinatarios antes
-de activar correo real.
+Usar el adaptador offline y el buzón simulado para la evaluación académica.
+Rotular cualquier comprobación independiente con un proveedor externo.
 
 ## Guion de la sesión
 
 1. **Apertura y formación.** Confirmar la revisión desplegada y que
-   Operación completó el smoke de staging. Repasar roles, protección de
+   se verificó el arranque del entorno aislado. Repasar roles, protección de
    documentos, significado de los estados y cómo registrar tiempos.
    Mostrar un caso sintético y practicar una corrección y su comprobación
    en el historial. Dejar esta formación fuera de los tiempos de análisis.
@@ -94,7 +91,7 @@ condición, responsable y acción requerida.
 
 | ID | Acción del participante | Resultado esperado y evidencia |
 | --- | --- | --- |
-| UAT-01 · Acceso | Abrir staging sin sesión, entrar como analista y administrador, intentar consultar otra organización y una acción de aprobación como analista. | Sesión requerida, roles correctos, organización ajena y acción administrativa denegadas. Registrar códigos y rol, sin tokens. |
+| UAT-01 · Acceso | Abrir el entorno de ensayo sin sesión, entrar como analista y administrador, intentar consultar otra organización y una acción de aprobación como analista. | Sesión requerida, roles correctos, organización ajena y acción administrativa denegadas. Registrar códigos y rol, sin tokens. |
 | UAT-02 · Catálogo | Revisar fecha de sincronización, filtrar por entidad, ubicación, modalidad y cierre cuando haya datos. Abrir A, volver, abrir B y comprobar ambos enlaces oficiales. | Filtros conservados, fichas y referencias distintas. Distinguir estado oficial y vigencia abierta, cerrada, vencida o desconocida al corte. Registrar fecha de recepción cuando esté disponible y señalar fechas ausentes. |
 | UAT-03 · Expediente | Abrir una asociación oficial validada, cargar manualmente un documento y una adenda cuando falte la fuente y volver de B a A. Probar cuarentena con fixture aprobada para el ensayo. | A y B conservan documentos propios con origen, versión e ID de oportunidad. El archivo en cuarentena queda excluido del uso y de la descarga. |
 | UAT-04 · Extracción | Procesar PDF digital y escaneado, DOCX y XLSX donde estén en la muestra. Abrir las citas y provocar un fallo o cobertura insuficiente con una fixture aislada. | Texto con página, sección o celda comprobable y vínculo a versión. OCR o fallo visible. La cobertura insuficiente queda pendiente de revisión. |
@@ -103,7 +100,7 @@ condición, responsable y acción requerida.
 | UAT-07 · Encaje y personal | Comercial valida la línea de servicio con su evidencia. Talento Humano verifica un cargo con cobertura, otro con brecha parcial o 0 % verificado y otro con disponibilidad desconocida. Probar periodos solapados. | Dedicación y periodos trazables, brechas previsibles por intervalo y propuesta de evaluar contratación o reasignación. La disponibilidad desconocida queda por confirmar y Talento Humano registra una decisión. |
 | UAT-08 · Margen | Finanzas captura un escenario base y uno alternativo con ingreso, costos directos e indirectos, personal, contratación y contingencia en la moneda acordada. Quitar un costo indispensable y probar ingreso cero en un escenario separado. | La utilidad equivale a ingreso menos costos y el margen a utilidad sobre ingreso. Si falta un costo, cálculo pendiente. Con ingreso cero, margen indefinido. El presupuesto publicado aparece como referencia salvo un supuesto explícito y justificado. El costo de personal se cuenta una vez. |
 | UAT-09 · Aprobación y cambios | Aprobar humanamente una revisión. En ensayos aislados, cambiar pliego, adenda o perfil. Comprobar las consecuencias en informe y resultados dependientes. | Cada cambio invalida la aprobación afectada; el PDF anterior queda bloqueado y escenarios ligados se muestran desactualizados. Guardar nueva revisión y aprobación con evidencias vigentes. |
-| UAT-10 · Informe y correo | Abrir PDF vigente con cuenta autorizada, contrastar la versión aprobada y rechazar acceso anónimo. Intentar un destinatario fuera de la lista en la prueba técnica y repetir el envío a un buzón autorizado. | PDF privado con versión, fecha, aprobador, citas y pendientes. Destino no autorizado bloqueado antes del proveedor. Registrar idempotencia en la bandeja y confirmar recepción en el buzón real autorizado, sin capturar el cuerpo. |
+| UAT-10 · Informe y correo | Abrir PDF vigente con cuenta autorizada, contrastar la versión aprobada y rechazar acceso anónimo. Intentar un destinatario fuera de la lista en la prueba técnica y repetir el envío a un buzón autorizado. | PDF privado con versión, fecha, aprobador, citas y pendientes. Destino no autorizado bloqueado antes del proveedor. Registrar idempotencia en la bandeja y confirmar aceptación en el buzón simulado, sin capturar el cuerpo. |
 | UAT-11 · Operación | Operación demuestra caducidad, restauración y rollback al equipo en un destino aislado con la versión integrada. Verificar acceso posterior a los contenidos de prueba. | Datos vencidos inaccesibles, purga reaplicada al restaurar y maestros preservados. Anotar referencia del runbook, revisión y comandos, con evidencia depurada. |
 | UAT-12 · Decisión de negocio | Comercial, Talento Humano y Finanzas validan o dejan pendiente su parte. Presentar comparación manual/asistida y conflictos a Gerencia. | Acta por área con decisión, evidencia, versión y pendientes. Acción, responsable, plazo y comprobación siguiente para cada condición. Decisión firmada por Gerencia. |
 
@@ -147,31 +144,19 @@ sobre un solo SHA desplegado que contenga #13, #23 y #24.
 | #13 · af097de | EAG_TEST_POSTGRES=1 python -m pytest -q tests/test_retention_postgres.py | 1 aprobada en PostgreSQL local desechable. Se repitió tras iniciar Docker Desktop, que inicialmente no tenía el motor disponible. |
 | [#24 · 80803ae](https://github.com/SamuLopez1/EAGingenieros/pull/33), con [#23 · f396869](https://github.com/SamuLopez1/EAGingenieros/pull/32) | python -m pytest -q tests/test_staffing.py tests/test_margin.py | 14 aprobadas. |
 
-Para repetir el ensayo de navegador con identidades y datos sintéticos,
-usar los comandos de la revisión correspondiente. Los dos scripts usan
-la misma familia de puertos locales, así que se ejecutan por separado.
-El [runbook de #13](OPERACION-13.md) especifica los preparativos y el smoke
-de acceso HTTPS para el despliegue autorizado.
+Para repetir el ensayo local integrado con identidades y documentos sintéticos:
 
 ~~~powershell
-# Desde la raíz de #13
-python scripts/mvp06_preview.py --dossier --extraction --comparison --report --browser-cli RUTA_A_PLAYWRIGHT_CLI
-
-# Desde la raíz de #24, que incluye #23
-python scripts/mvp06_preview.py --dossier --extraction --comparison --staffing --margin --browser-cli RUTA_A_PLAYWRIGHT_CLI
+python scripts/mvp06_preview.py --dossier --extraction --comparison --staffing --margin --shortlist --report --browser-cli RUTA_A_PLAYWRIGHT_CLI
 ~~~
 
-**Pendiente de ejecución empresarial.** Los PR de las dependencias siguen
-en borrador. No consta un staging desplegado ni una referencia a la
-autorización de usuarios, expedientes y buzón. El smoke
-`python -m app.operations.staging_smoke` devolvió código 2 al faltar el
-origen HTTPS y los JWT de ambas cuentas. Los tiempos empresariales,
-correcciones del piloto y decisiones de las áreas quedan sin registrar hasta
-que se ejecute con EAG.
+El smoke automático verifica el funcionamiento técnico. La sesión académica y
+sus mediciones manuales se registran en la bitácora tras realizarlas. Indicar el
+SHA, el tipo de entorno y si se usaron oportunidades públicas o fixtures.
 
 ## Checklist de puesta en marcha
 
-- [ ] Staging integrado identificado por SHA y migración, permisos y
+- [ ] Entorno integrado identificado por SHA y migración, permisos y
   recuperación verificados por Operación y Seguridad.
 - [ ] Muestra, participantes, roles, buzón, alcance y tratamiento aprobados.
 - [ ] Formación y umbrales registrados antes de medir. Pares y denominadores
@@ -179,4 +164,4 @@ que se ejecute con EAG.
 - [ ] Acta con encaje, disponibilidad y margen revisada por las áreas y
   controles críticos resueltos.
 - [ ] Go/no-go de Gerencia, responsables y plazos anotados. Conservar o
-  eliminar los registros del piloto según autorización de EAG.
+  eliminar los registros del piloto según el alcance acordado por el equipo.

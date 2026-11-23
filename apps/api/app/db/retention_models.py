@@ -15,7 +15,7 @@ class RetentionTombstone(Base):
         Index("ix_retention_comparison", "kind", "organization_id", "opportunity_id", "revision"),
     )
 
-    key: Mapped[str] = mapped_column(String(104), primary_key=True)
+    key: Mapped[str] = mapped_column(String(160), primary_key=True)
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
     organization_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
     opportunity_id: Mapped[int] = mapped_column(BigInteger, nullable=False)

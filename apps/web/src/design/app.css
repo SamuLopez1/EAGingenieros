@@ -479,3 +479,50 @@ td.is-unknown {
   margin: .65rem 0;
   border: 1px solid var(--hairline);
 }
+
+.shortlist {
+  margin: 1rem 0;
+  padding: 1rem;
+}
+
+.shortlist-items {
+  list-style: none;
+  padding: 0;
+}
+
+.shortlist-items li {
+  margin-bottom: .35rem;
+}
+
+.shortlist-scroll {
+  overflow-x: auto;
+  margin: .75rem 0;
+}
+
+.shortlist-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.shortlist-table th,
+.shortlist-table td {
+  border: 1px solid var(--hairline);
+  padding: .75rem;
+  vertical-align: top;
+  text-align: left;
+}
+
+.shortlist-table td,
+.shortlist-table thead th[scope="col"]:not(:first-child) {
+  min-width: 13rem;
+  max-width: 22rem;
+  overflow-wrap: anywhere;
+}
+
+.shortlist-table small {
+  display: block;
+}
+
+.shortlist-table ul {
+  padding-left: 1rem;
+}

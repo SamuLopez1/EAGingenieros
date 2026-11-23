@@ -1,4 +1,4 @@
-# [MVP-14] Ejecutar piloto con EAG, medir resultados y decidir lanzamiento
+# [MVP-14] Ejecutar una evaluación académica del MVP
 
 ## Objetivo
 
@@ -10,11 +10,11 @@ Validar utilidad y riesgos con usuarios antes de dar por terminado el MVP.
 - #23 y #24 para validar encaje, disponibilidad y margen en el piloto
   completo. Se pueden ensayar antes los tramos disponibles.
 
-Las dependencias requieren su resultado técnico aceptado. En MVP-02 se puede avanzar con el borrador del caso y datos públicos mientras EAG valida la muestra; eso no sustituye la aceptación empresarial.
+Usar una empresa ficticia, cuentas de prueba y documentos públicos o sintéticos identificados.
 
 ## Trabajo incluido
 
-- Preparar al menos 20 oportunidades revisadas manualmente si EAG autoriza y aporta muestra; justificar limitaciones.
+- Preparar al menos dos oportunidades con revisión manual y declarar la fuente y las limitaciones.
 - Medir tiempos del flujo manual y asistido con mismo alcance y registrar errores por campo/falsos cumplimientos.
 - Ejecutar UAT con analista/administrador, registrar incidencias, capacitación y manual breve.
 - Validar con Comercial, Talento Humano y Finanzas el encaje, la
@@ -27,7 +27,7 @@ Las dependencias requieren su resultado técnico aceptado. En MVP-02 se puede av
 - [ ] Comparación de tiempos incluye revisión/correcciones y comunica tamaño de muestra y limitaciones.
 - [ ] Se acuerdan umbrales de aceptación antes de evaluar; 60% no se trata como garantía.
 - [ ] Incidencias críticas de seguridad o falsos cumplimientos no resueltos bloquean lanzamiento.
-- [ ] Se registra aceptación o rechazo por EAG; manual y checklist de puesta en marcha están listos.
+- [ ] Se registra la decisión académica del equipo, el resultado y el checklist de ejecución.
 - [ ] El piloto completo documenta las validaciones y pendientes de
   Comercial, Talento Humano y Finanzas.
 
@@ -36,7 +36,7 @@ Las dependencias requieren su resultado técnico aceptado. En MVP-02 se puede av
 El [guion del piloto](PILOTO-14.md) contiene las pruebas de aceptación y la
 [bitácora y acta](PILOTO-14-BITACORA.md) registra tiempos, correcciones y
 decisiones. Ejecutar el recorrido con muestra y participantes autorizados.
-Mientras falten, la ejecución y la aceptación de EAG quedan pendientes.
+Registrar las mediciones y la evaluación humana al completar la sesión.
 
 ## Fuera de alcance
 

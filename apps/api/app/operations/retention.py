@@ -21,14 +21,16 @@ from app.config import Settings
 from app.db.comparison_models import ComparisonRevision, DossierRevision
 from app.db.document_models import OpportunityDocument
 from app.db.extraction_models import DocumentExtraction
+from app.db.margin_models import MarginVersion
 from app.db.models import Opportunity
 from app.db.report_models import ReportDelivery
 from app.db.retention_models import RetentionTombstone
 from app.db.session import create_engine_from_url
+from app.db.staffing_models import StaffingCorrection
 from app.documents.service import utc
 from app.operations.scratch import sweep
 
-Kind = Literal["document", "comparison", "delivery"]
+Kind = Literal["document", "comparison", "delivery", "margin"]
 MAX_LEDGER_BYTES = 8_000_000
 BATCH = 250
 LOCK = 13132026
@@ -49,6 +51,9 @@ class Record(BaseModel):
         if self.kind == "comparison":
             if self.revision is None or self.object_id is not None:
                 raise ValueError("Referencia de comparación inválida.")
+        elif self.kind == "margin":
+            if self.object_id is None or self.revision is None:
+                raise ValueError("Referencia de margen inválida.")
         elif self.object_id is None or self.revision is not None:
             raise ValueError("Referencia de objeto inválida.")
         return self
@@ -56,6 +61,8 @@ class Record(BaseModel):
     @property
     def key(self) -> str:
         identity = f"{self.organization_id}/{self.opportunity_id}"
+        if self.kind == "margin":
+            return f"{self.kind}/{identity}/{self.object_id}/{self.revision}"
         return f"{self.kind}/{identity}/{self.revision or self.object_id}"
 
 
@@ -161,7 +168,23 @@ def candidates(session: Session, now: datetime) -> list[Record]:
         .order_by(ReportDelivery.expires_at, ReportDelivery.id)
         .limit(BATCH)
     )
+    margins = session.execute(
+        select(
+            MarginVersion.organization_id, MarginVersion.opportunity_id,
+            MarginVersion.scenario_id, MarginVersion.version,
+        )
+        .where(MarginVersion.expires_at <= now)
+        .order_by(MarginVersion.expires_at, MarginVersion.scenario_id, MarginVersion.version)
+        .limit(BATCH)
+    )
     return [
+        *(
+            Record(
+                kind="margin", organization_id=org, opportunity_id=op,
+                object_id=scenario, revision=version, purged_at=now,
+            )
+            for org, op, scenario, version in margins
+        ),
         *(
             Record(
                 kind="document",
@@ -231,7 +254,22 @@ def delete_target(session: Session, item: Record) -> bool:
             .returning(OpportunityDocument.id)
         )
         return ids.first() is not None
+    if item.kind == "margin":
+        ids = session.execute(
+            delete(MarginVersion).where(
+                MarginVersion.organization_id == org,
+                MarginVersion.opportunity_id == opportunity_id,
+                MarginVersion.scenario_id == item.object_id,
+                MarginVersion.version == item.revision,
+            ).returning(MarginVersion.scenario_id)
+        )
+        return ids.first() is not None
     if item.kind == "comparison":
+        session.execute(delete(StaffingCorrection).where(
+            StaffingCorrection.organization_id == org,
+            StaffingCorrection.opportunity_id == opportunity_id,
+            StaffingCorrection.comparison_revision == item.revision,
+        ))
         ids = session.execute(
             delete(ComparisonRevision)
             .where(
@@ -352,6 +390,10 @@ def overview(session: Session, now: datetime) -> dict[str, int]:
                 ReportDelivery,
             )
             .where(ReportDelivery.expires_at <= now)
+        )
+        or 0,
+        "margenes_vencidos": session.scalar(
+            select(func.count()).select_from(MarginVersion).where(MarginVersion.expires_at <= now)
         )
         or 0,
         "extracciones_fallidas": session.scalar(

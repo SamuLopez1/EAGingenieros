@@ -4,7 +4,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "20261122000011"
-down_revision = "20261122000010"
+down_revision = "20261122000012"
 branch_labels = None
 depends_on = None
 
@@ -12,13 +12,14 @@ DEADLINES = (
     ("opportunity_documents", "retention_until"),
     ("comparison_revisions", "expires_at"),
     ("report_deliveries", "expires_at"),
+    ("margin_versions", "expires_at"),
 )
 
 
 def upgrade() -> None:
     op.create_table(
         "retention_tombstones",
-        sa.Column("key", sa.String(104), primary_key=True),
+        sa.Column("key", sa.String(160), primary_key=True),
         sa.Column("kind", sa.String(16), nullable=False),
         sa.Column("organization_id", sa.Uuid(), nullable=False),
         sa.Column("opportunity_id", sa.BigInteger(), nullable=False),

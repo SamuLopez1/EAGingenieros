@@ -1,6 +1,6 @@
-# Piloto EAG · Bitácora y acta
+# Evaluación académica · Bitácora y acta
 
-Plantilla vacía para completar en el espacio privado autorizado. Usar
+Plantilla vacía para completar en el espacio de trabajo del equipo. Usar
 identificadores de caso, participantes por rol o código y referencias a
 evidencia dentro de ese espacio. Conservar las salidas iniciales y revisadas
 allí. El [guion](PILOTO-14.md) define los controles y los tiempos.
@@ -76,5 +76,5 @@ registrar responsable, plazo y comprobación.
 | Errores iniciales y residuales por tipo, denominadores y cobertura | |
 | Falsos cumplimientos, incidencias críticas y evidencia de su resolución | |
 | Validación de Comercial, Talento Humano, Finanzas y Seguridad | |
-| Go/no-go de Gerencia, motivo, firma o referencia al acta aprobada | |
+| Decisión del equipo evaluador, motivo, firma o referencia al acta aprobada | |
 | Acciones pendientes, responsables, plazos y comprobación siguiente | |
