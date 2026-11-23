@@ -26,36 +26,84 @@ from app.documents.validation import (
 
 
 def make_pdf() -> bytes:
-    from reportlab.pdfgen import canvas
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] >>",
+    ]
+    data = bytearray(b"%PDF-1.4\n")
+    offsets = []
+    for index, body in enumerate(objects, 1):
+        offsets.append(len(data))
+        data.extend(f"{index} 0 obj\n".encode() + body + b"\nendobj\n")
+    xref = len(data)
+    data.extend(b"xref\n0 4\n0000000000 65535 f \n")
+    for offset in offsets:
+        data.extend(f"{offset:010d} 00000 n \n".encode())
+    data.extend(f"trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode())
+    return bytes(data)
 
-    buffer = io.BytesIO()
-    pdf = canvas.Canvas(buffer)
-    pdf.drawString(60, 760, "Contenido de un pliego de condiciones valido.")
-    pdf.showPage()
-    pdf.save()
-    buffer.seek(0)
-    return buffer.read()
+
+def office_files(path: str, content_type: str) -> dict[str, bytes]:
+    return {
+        "[Content_Types].xml": (
+            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            '<Default Extension="rels" '
+            'ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            f'<Override PartName="/{path}" ContentType="{content_type}"/>'
+            '</Types>'
+        ).encode(),
+        "_rels/.rels": (
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" '
+            'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
+            'officeDocument" '
+            f'Target="{path}"/>'
+            '</Relationships>'
+        ).encode(),
+    }
 
 
 def make_docx(with_macros: bool = False) -> bytes:
-    import docx
-
-    document = docx.Document()
-    document.add_paragraph("Certificado de experiencia con contenido suficiente.")
-    buffer = io.BytesIO()
-    document.save(buffer)
-    data = buffer.getvalue()
-
+    files = office_files(
+        "word/document.xml",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml",
+    )
+    files["word/document.xml"] = (
+        b'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        b"<w:body><w:p><w:r><w:t>Documento sintetico</w:t></w:r></w:p></w:body></w:document>"
+    )
     if with_macros:
-        # Añadir un vbaProject.bin, que es lo que delata un documento con macros.
-        source = zipfile.ZipFile(io.BytesIO(data))
-        out = io.BytesIO()
-        with zipfile.ZipFile(out, "w") as target:
-            for item in source.infolist():
-                target.writestr(item, source.read(item.filename))
-            target.writestr("word/vbaProject.bin", b"\x00macros")
-        return out.getvalue()
-    return data
+        files["word/vbaProject.bin"] = b"\x00synthetic"
+    return make_zip(files)
+
+
+def make_xlsx() -> bytes:
+    files = office_files(
+        "xl/workbook.xml",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml",
+    )
+    files["[Content_Types].xml"] = files["[Content_Types].xml"].replace(
+        b"</Types>",
+        b'<Override PartName="/xl/worksheets/sheet1.xml" ContentType="'
+        b'application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>',
+    )
+    files["xl/workbook.xml"] = (
+        b'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+        b'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        b'<sheets><sheet name="QA" sheetId="1" r:id="rId1"/></sheets></workbook>'
+    )
+    files["xl/_rels/workbook.xml.rels"] = (
+        b'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        b'<Relationship Id="rId1" '
+        b'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" '
+        b'Target="worksheets/sheet1.xml"/></Relationships>'
+    )
+    files["xl/worksheets/sheet1.xml"] = (
+        b'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        b"<sheetData/></worksheet>"
+    )
+    return make_zip(files)
 
 
 def make_zip(entries: dict[str, bytes]) -> bytes:
@@ -135,14 +183,7 @@ def test_docx_is_detected_by_internal_structure() -> None:
 
 
 def test_xlsx_is_detected_by_internal_structure() -> None:
-    import openpyxl
-
-    workbook = openpyxl.Workbook()
-    workbook.active.append(["a", "b"])
-    buffer = io.BytesIO()
-    workbook.save(buffer)
-
-    assert "spreadsheetml" in (detect_content_type(buffer.getvalue()) or "")
+    assert "spreadsheetml" in (detect_content_type(make_xlsx()) or "")
 
 
 def test_unknown_content_has_no_type() -> None:
