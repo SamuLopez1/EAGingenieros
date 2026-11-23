@@ -12,6 +12,7 @@ from app.db import (
     margin_models,  # noqa: F401 - register migration metadata
     profile_models,  # noqa: F401 - register migration metadata
     report_models,  # noqa: F401 - register migration metadata
+    retention_models,  # noqa: F401 - register migration metadata
     shortlist_models,  # noqa: F401 - register migration metadata
     staffing_models,  # noqa: F401 - register migration metadata
 )

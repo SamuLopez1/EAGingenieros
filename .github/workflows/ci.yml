@@ -27,6 +27,12 @@ jobs:
       - run: python -m pytest
         env:
           EAG_TEST_REAL_OCR: "1"
+      - name: Probar restauracion y rollback en PostgreSQL
+        run: |
+          docker pull postgres:17.6-bookworm
+          python -m pytest -q tests/test_retention_postgres.py
+        env:
+          EAG_TEST_POSTGRES: "1"
       - run: python -m unittest discover -s tests -p 'test_*.py'
         working-directory: .
 

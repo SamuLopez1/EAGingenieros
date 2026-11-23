@@ -7,7 +7,6 @@ import os
 import signal
 import subprocess
 import sys
-import tempfile
 from collections.abc import Callable
 from pathlib import Path
 from time import sleep
@@ -20,6 +19,7 @@ from app.config import Settings
 from app.db.session import create_engine_from_url, create_session_factory
 from app.documents.extraction import Result, failed
 from app.documents.extraction_jobs import Claim, claim_next, finish_claim
+from app.operations.scratch import workspace
 
 Processor = Callable[[Claim, Settings], Result]
 MAX_RESULT_BYTES = 3_000_000
@@ -45,45 +45,52 @@ def stop_process(process: subprocess.Popen[bytes]) -> None:
 
 
 def process_claim(claim: Claim, settings: Settings) -> Result:
-    with tempfile.TemporaryDirectory(prefix="eag-extraction-") as scratch:
-        # El parser no recibe tokens ni configuración de base de datos.
-        env = {
-            key: value for key, value in os.environ.items()
-            if key.upper() in {
-                "PATH", "SYSTEMROOT", "WINDIR", "SYSTEMDRIVE", "PATHEXT",
-                "TESSDATA_PREFIX", "LANG", "LC_ALL",
-            }
+    try:
+        with workspace(settings.extraction_scratch_root) as scratch:
+            return extract_in_workspace(claim, settings, scratch)
+    except (OSError, ValueError):
+        return failed("worker_fallido")
+
+
+def extract_in_workspace(claim: Claim, settings: Settings, scratch: str) -> Result:
+    # El parser no recibe tokens ni configuración de base de datos.
+    env = {
+        key: value for key, value in os.environ.items()
+        if key.upper() in {
+            "PATH", "SYSTEMROOT", "WINDIR", "SYSTEMDRIVE", "PATHEXT",
+            "TESSDATA_PREFIX", "LANG", "LC_ALL",
         }
-        env.update(TMPDIR=scratch, TEMP=scratch, TMP=scratch, OMP_THREAD_LIMIT="1")
-        try:
-            process = subprocess.Popen(
-                [
-                    sys.executable, "-m", "app.documents.extraction_child", claim.format,
-                    settings.extraction_ocr_language, str(settings.extraction_ocr_max_pages),
-                    str(settings.document_max_bytes),
-                ],
-                cwd=Path(__file__).resolve().parents[2],
-                env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                start_new_session=os.name == "posix",
-            )
-        except OSError:
-            return failed("worker_fallido")
-        try:
-            stdout, _ = process.communicate(
-                claim.payload, timeout=settings.extraction_timeout_seconds,
-            )
-        except subprocess.TimeoutExpired:
-            stop_process(process)
-            return failed("tiempo_agotado")
-        except BaseException:
-            stop_process(process)
-            raise
-        if process.returncode != 0 or len(stdout) > MAX_RESULT_BYTES:
-            return failed("worker_fallido")
-        try:
-            return Result.model_validate_json(stdout)
-        except ValidationError:
-            return failed("worker_fallido")
+    }
+    env.update(TMPDIR=scratch, TEMP=scratch, TMP=scratch, OMP_THREAD_LIMIT="1")
+    try:
+        process = subprocess.Popen(
+            [
+                sys.executable, "-m", "app.documents.extraction_child", claim.format,
+                settings.extraction_ocr_language, str(settings.extraction_ocr_max_pages),
+                str(settings.document_max_bytes),
+            ],
+            cwd=Path(__file__).resolve().parents[2],
+            env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            start_new_session=os.name == "posix",
+        )
+    except OSError:
+        return failed("worker_fallido")
+    try:
+        stdout, _ = process.communicate(
+            claim.payload, timeout=settings.extraction_timeout_seconds,
+        )
+    except subprocess.TimeoutExpired:
+        stop_process(process)
+        return failed("tiempo_agotado")
+    except BaseException:
+        stop_process(process)
+        raise
+    if process.returncode != 0 or len(stdout) > MAX_RESULT_BYTES:
+        return failed("worker_fallido")
+    try:
+        return Result.model_validate_json(stdout)
+    except ValidationError:
+        return failed("worker_fallido")
 
 
 def run_one(

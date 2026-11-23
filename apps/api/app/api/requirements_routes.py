@@ -1,8 +1,6 @@
 """Análisis del expediente autorizado y marcado para revisión."""
 
-from collections import OrderedDict
-from datetime import UTC, datetime, timedelta
-from threading import Lock
+from datetime import UTC, datetime
 from typing import Literal, cast
 
 from fastapi import APIRouter, Depends, Response
@@ -27,29 +25,6 @@ router = APIRouter(
     tags=["requisitos"],
     dependencies=[Depends(require_eag_member)],
 )
-
-
-cache: OrderedDict[str, tuple[datetime, Analysis]] = OrderedDict()
-cache_lock = Lock()
-
-
-def cached_analysis(
-    fingerprint: str,
-    sources: list[Source],
-    warnings: list[Warning],
-    expires_at: datetime,
-) -> Analysis:
-    now = datetime.now(UTC)
-    with cache_lock:
-        for key, (expiry, _) in list(cache.items()):
-            if expiry <= now:
-                del cache[key]
-        if fingerprint not in cache:
-            result = build_analysis(OfflineAdapter(), fingerprint, sources, warnings)
-            cache[fingerprint] = (min(expires_at, now + timedelta(minutes=5)), result)
-            if len(cache) > 16:
-                cache.popitem(last=False)
-        return cache[fingerprint][1]
 
 
 @router.post("", response_model=Analysis)
@@ -114,13 +89,10 @@ def analyze_selected(scope: DossierDep, tools: ServicesDep) -> Analysis:
             bytes_used += size
     if len(selected) > MAX_SOURCES:
         warnings.append(Warning(code="limite_documentos"))
+    adapter = OfflineAdapter()
     key = fingerprint_for(
-        f"{scope.organization_id}/{scope.opportunity.id}/{OfflineAdapter().version}",
+        f"{scope.organization_id}/{scope.opportunity.id}/{adapter.version}",
         sources,
         warnings,
     )
-    expires_at = min(
-        (utc(doc.retention_until) for doc in selected if doc.id in available_ids),
-        default=now + timedelta(minutes=5),
-    )
-    return cached_analysis(key, sources, warnings, expires_at)
+    return build_analysis(adapter, key, sources, warnings)

@@ -6,7 +6,7 @@ from hashlib import sha256
 
 from fastapi import APIRouter, Depends, Response
 from pydantic import TypeAdapter
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.api.document_routes import PRIVATE, DocumentServices, DossierDep, ServicesDep
@@ -28,6 +28,7 @@ from app.comparison import (
 )
 from app.db.comparison_models import ComparisonRevision, DossierRevision
 from app.db.models import utcnow
+from app.db.retention_models import RetentionTombstone
 from app.documents.requirements import Analysis
 from app.documents.service import DocumentError, Dossier, utc
 from app.profile import Entry
@@ -50,6 +51,7 @@ class Inputs:
     requirements: Analysis
     rows: list[Row]
     expires_at: datetime
+    purged_revision: int
 
 
 def prepare(scope: Dossier, tools: DocumentServices) -> Inputs:
@@ -70,7 +72,13 @@ def prepare(scope: Dossier, tools: DocumentServices) -> Inputs:
         for doc in scope.items()
         if doc.under_review and doc.status == "disponible" and utc(doc.retention_until) > now
     ]
+    purged_revision = scope.session.scalar(select(func.max(RetentionTombstone.revision)).where(
+        RetentionTombstone.kind == "comparison",
+        RetentionTombstone.organization_id == scope.organization_id,
+        RetentionTombstone.opportunity_id == scope.opportunity.id,
+    )) or 0
     return Inputs(
+        purged_revision=purged_revision,
         dossier_key=dossier_key,
         fingerprint=fingerprint,
         profile_version=version,
@@ -163,7 +171,7 @@ def present(scope: Dossier, inputs: Inputs, last: ComparisonRevision | None) -> 
         result.invalidated_by.append("expediente")
     if last.profile_version != inputs.profile_version:
         result.invalidated_by.append("perfil")
-    if utc(last.expires_at) <= now:
+    if utc(last.expires_at) <= now or last.revision <= inputs.purged_revision:
         result.invalidated_by.append("retencion")
     if last.fingerprint != inputs.fingerprint and not result.invalidated_by:
         result.invalidated_by.append("reglas")
@@ -191,7 +199,7 @@ def append(
     event = ComparisonRevision(
         organization_id=scope.organization_id,
         opportunity_id=scope.opportunity.id,
-        revision=last.revision + 1 if last else 1,
+        revision=max(last.revision if last else 0, inputs.purged_revision) + 1,
         actor_id=scope.principal.subject_id,
         actor_role=scope.principal.membership.role.value,
         created_at=utcnow(),
@@ -226,6 +234,7 @@ def require_current(
         or last.revision != revision
         or last.fingerprint != fingerprint
         or inputs.fingerprint != fingerprint
+        or last.revision <= inputs.purged_revision
         or utc(last.expires_at) <= utcnow()
     ):
         raise DocumentError(409, "revision_desactualizada")
@@ -244,7 +253,10 @@ def compare(scope: DossierDep, tools: ServicesDep, response: Response) -> Compar
     scope.lock()
     inputs = prepare(scope, tools)
     last = latest(scope)
-    if last is None or last.fingerprint != inputs.fingerprint or utc(last.expires_at) <= utcnow():
+    if (
+        last is None or last.fingerprint != inputs.fingerprint
+        or last.revision <= inputs.purged_revision or utc(last.expires_at) <= utcnow()
+    ):
         last = append(scope, inputs, last, "generado", {}, {})
     response.headers["Cache-Control"] = PRIVATE
     return present(scope, inputs, last)
