@@ -7,6 +7,7 @@ from app.config import Settings
 from app.db import (
     document_models,  # noqa: F401 - register migration metadata
     filter_models,  # noqa: F401 - register migration metadata
+    profile_models,  # noqa: F401 - register migration metadata
 )
 from app.db.models import Base
 

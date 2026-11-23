@@ -6,6 +6,7 @@ import type { AuthClient, SessionState } from "./auth";
 import { fetchHealth } from "./health";
 
 const OpportunitiesPage = lazy(() => import("./OpportunitiesPage"));
+const CompanyProfile = lazy(() => import("./CompanyProfile"));
 
 type ConnectionState =
   | { kind: "loading" }
@@ -30,6 +31,7 @@ export function App({
   const [signingIn, setSigningIn] = useState(false);
   const [loginMessage, setLoginMessage] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
+  const [showProfile, setShowProfile] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -94,6 +96,7 @@ export function App({
       await authClient.signOut();
       setLoginMessage(null);
       setAuth({ kind: "anonymous" });
+      setShowProfile(false);
     } catch {
       setLoginMessage("No fue posible cerrar la sesión. Inténtalo de nuevo.");
     }
@@ -105,11 +108,15 @@ export function App({
         <nav className="session-bar" aria-label="Cuenta">
           <span>Sesión autenticada.</span>
           <span>Rol asignado por el servidor: {auth.role}.</span>
+          <button type="button" onClick={() => setShowProfile((value) => !value)}>
+            {showProfile ? "Volver a oportunidades" : "Perfil empresarial"}
+          </button>
           <button type="button" onClick={signOut}>Cerrar sesión</button>
         </nav>
         {loginMessage ? <p role="status">{loginMessage}</p> : null}
         <Suspense fallback={<p role="status">Cargando catálogo…</p>}>
-          <OpportunitiesPage key={auth.organizationId} role={auth.role} />
+          {showProfile ? <CompanyProfile key={auth.organizationId} editable={auth.role === "administrador"} />
+            : <OpportunitiesPage key={auth.organizationId} role={auth.role} />}
         </Suspense>
       </div>
     );
