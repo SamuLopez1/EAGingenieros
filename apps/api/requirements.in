@@ -4,6 +4,10 @@ pydantic-settings
 PyJWT[crypto]==2.10.1
 uvicorn
 httpx
+sqlalchemy
+psycopg[binary]
+alembic
+tzdata; sys_platform == "win32"
 pytest
 ruff
 mypy

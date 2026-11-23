@@ -1,0 +1,16 @@
+[Unit]
+Description=Sincronización incremental de SECOP II
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=1h
+StartLimitBurst=3
+
+[Service]
+Type=oneshot
+User=eag-secopsync
+WorkingDirectory=/opt/eag/apps/api
+EnvironmentFile=/etc/eag/secop-sync.env
+ExecStart=/opt/eag/apps/api/.venv/bin/python -m app.secop.daily --run
+Restart=on-failure
+RestartSec=15min
+NoNewPrivileges=true

@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
 
+from app.api.routes import router as opportunities_router
 from app.auth import (
     AuthServices,
     JwtValidator,
@@ -25,6 +30,8 @@ from app.contracts import (
     InvitationResponse,
     SessionResponse,
 )
+from app.db.session import create_engine_from_url, create_session_factory
+from app.db.sync_service import create_sync_service
 from app.invitations import (
     InvitationAuthorizationError,
     InvitationProviderUnavailable,
@@ -43,13 +50,28 @@ def create_app(
     auth_services: AuthServices | None = None,
     invitation_service: InvitationService | None = None,
 ) -> FastAPI:
-    """Construye una API sin dependencias externas ni estado compartido."""
+    """Construye la API y habilita persistencia con una URL de PostgreSQL."""
 
     active_settings = settings or Settings()
+    engine = (
+        create_engine_from_url(active_settings.require_database_url())
+        if active_settings.database_is_configured
+        else None
+    )
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        try:
+            yield
+        finally:
+            if engine is not None:
+                engine.dispose()
+
     app = FastAPI(
         title=active_settings.app_name,
         version=active_settings.app_version,
-        description="Contrato inicial de EAG. No incluye módulos de negocio.",
+        description="API de EAG para acceso y sincronización de oportunidades oficiales.",
+        lifespan=lifespan,
     )
 
     if active_settings.cors_origins:
@@ -78,6 +100,20 @@ def create_app(
         else UnconfiguredInvitationGateway()
     )
     app.state.invitation_service = invitation_service or InvitationService(gateway=invitations)
+
+    if engine is not None:
+        factory = create_session_factory(engine)
+        app.state.opportunity_session_factory = factory
+        app.state.sync_service_factory = lambda: create_sync_service(active_settings, factory)
+    app.state.opportunity_settings = active_settings
+    app.include_router(opportunities_router)
+
+    @app.exception_handler(SQLAlchemyError)
+    async def persistence_unavailable(_: Request, error: Exception) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"detail": "La persistencia no está disponible."},
+        )
 
     @app.get("/health", response_model=HealthResponse, tags=["system"])
     def health() -> HealthResponse:
