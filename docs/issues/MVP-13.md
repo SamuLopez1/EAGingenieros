@@ -27,7 +27,7 @@ Las dependencias requieren su resultado técnico aceptado. En MVP-02 se puede av
 
 ## Verificación
 
-Suite de seguridad, simulación de caducidad, prueba de recuperación y smoke sobre staging. Registrar evidencia sin secretos.
+El [procedimiento de operación](OPERACION-13.md) registra responsables, comandos, evidencias de caducidad, recuperación y rollback, y el estado del smoke de staging.
 
 ## Fuera de alcance
 

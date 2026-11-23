@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import JSON, BigInteger, DateTime, ForeignKey, Integer, String, Uuid
+from sqlalchemy import JSON, BigInteger, DateTime, ForeignKey, Index, Integer, String, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -24,6 +24,7 @@ class DossierRevision(Base):
 
 class ComparisonRevision(Base):
     __tablename__ = "comparison_revisions"
+    __table_args__ = (Index("ix_comparison_revisions_expires_at", "expires_at"),)
 
     organization_id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     opportunity_id: Mapped[int] = mapped_column(

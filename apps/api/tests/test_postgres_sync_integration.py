@@ -425,7 +425,7 @@ def test_report_migration_protects_delivery_audit(postgres_engine: Engine) -> No
         connection.execute(text("CREATE ROLE authenticated"))
         connection.execute(text("ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO anon"))
         connection.execute(text("ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO authenticated"))
-    command.upgrade(config, "head")
+    command.upgrade(config, "20261122000010")
     with postgres_engine.connect() as connection:
         revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
         assert revision == "20261122000010"

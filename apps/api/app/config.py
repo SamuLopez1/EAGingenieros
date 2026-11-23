@@ -57,6 +57,10 @@ class Settings(BaseSettings):
     extraction_ocr_max_pages: int = Field(default=12, ge=0, le=50)
     extraction_ocr_language: str = Field(default="spa+eng", pattern=r"^[a-z]{3}([+][a-z]{3}){0,3}$")
 
+    retention_ledger_id: UUID | None = None
+    retention_ledger_secret: SecretStr | None = Field(default=None, min_length=32)
+    extraction_scratch_root: Path | None = None
+
     report_resend_api_key: SecretStr | None = None
     report_mail_sender: str | None = None
     report_mail_recipients: list[str] = Field(default_factory=list, max_length=20)

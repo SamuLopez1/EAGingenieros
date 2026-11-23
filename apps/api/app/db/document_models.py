@@ -24,6 +24,7 @@ from app.db.models import Base
 class OpportunityDocument(Base):
     __tablename__ = "opportunity_documents"
     __table_args__ = (
+        Index("ix_opportunity_documents_retention_until", "retention_until"),
         UniqueConstraint(
             "organization_id", "opportunity_id", "document_key", "version",
             name="uq_opportunity_document_version",
