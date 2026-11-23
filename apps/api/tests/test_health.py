@@ -1,8 +1,28 @@
+import os
+import subprocess
+import sys
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.config import Settings
 from app.main import create_app
+
+
+def test_asgi_entrypoint_imports_in_a_fresh_process(tmp_path: Path) -> None:
+    api_dir = Path(__file__).resolve().parents[1]
+    environment = {key: value for key, value in os.environ.items() if not key.startswith("EAG_")}
+    environment["PYTHONPATH"] = str(api_dir)
+    result = subprocess.run(
+        [sys.executable, "-c", "from app.main import app"],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_health_returns_public_status_version_and_environment() -> None:

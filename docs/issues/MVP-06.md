@@ -109,6 +109,19 @@ estados HTTP. Los archivos bajo `output/playwright/` quedan fuera de Git.
   destino no coincidió con la ficha original en ninguno de los dos casos.
   Queda pendiente confirmar el acceso al detalle remoto de cada proceso.
 
+### Verificación de arranque para integrar la pila
+
+El smoke de API y Vite detectó una importación circular al iniciar FastAPI en
+un proceso limpio. La consulta SQL carga sus modelos al ejecutarse y una prueba
+de regresión importa `app.main:app` en un proceso aislado antes de revisar el
+catálogo. Desde `apps/api`, se verifica con `python -m pytest -k
+test_asgi_entrypoint_imports_in_a_fresh_process`. El smoke integrado se verifica
+desde la raíz con `python scripts/smoke_local.py`.
+En la copia integrada de los PR #20, #19, #25 y #26, con los puertos del
+smoke asignados localmente, aprobaron el smoke, 169 pruebas de API con
+PostgreSQL desechable, 44 web y 13 del spike y del smoke. La comprobación
+no llamó a SECOP II ni a Supabase.
+
 ## Fuera de alcance
 
 Dashboard de métricas inventadas, extracción documental y recomendaciones IA.

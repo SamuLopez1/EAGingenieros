@@ -3,15 +3,17 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
-from typing import Literal, Self
+from typing import TYPE_CHECKING, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.db.models import Opportunity, SyncRun
 from app.opportunity_fields import CLOSED, OFFER_PHASE, OFFERING, Validity, validity
 from app.secop.client import PROCESSES_DATASET
+
+if TYPE_CHECKING:
+    from app.db.models import Opportunity
 
 Sort = Literal["published_desc", "published_asc", "entity_asc", "title_asc", "synced_desc"]
 
@@ -61,6 +63,9 @@ def day_start(value: date) -> datetime:
 
 
 def search_sql(session: Session, query: CatalogQuery) -> CatalogResult:
+    # Load ORM models after the catalog contracts and repository are initialized.
+    from app.db.models import Opportunity, SyncRun
+
     statement = select(Opportunity)
     if query.entity:
         statement = statement.where(Opportunity.entity.icontains(query.entity, autoescape=True))
