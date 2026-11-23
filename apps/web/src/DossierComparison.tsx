@@ -1,3 +1,4 @@
+import { StaffingSection } from "./StaffingSection";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { ReportSection } from "./ReportSection";
@@ -133,6 +134,10 @@ export function DossierComparison({ opportunityId, role, disabled, openDocument 
           <label>Justificación de aprobación<textarea name="approval" minLength={5} maxLength={500} required /></label>
           <button type="submit" className="btn btn-s" disabled={blocked || Boolean(editing)}>Aprobar comparación</button>
         </form> : null}
+      {result.status === "borrador" || result.status === "aprobado" ? (
+        <StaffingSection key={`${opportunityId}/${result.revision}/${result.fingerprint}`}
+          opportunityId={opportunityId} rows={result.rows} />
+      ) : null}
       {result.status === "aprobado" ? <ReportSection
         key={`${opportunityId}/${result.revision}`} opportunityId={opportunityId}
         revision={result.revision} canSend={role === "administrador"} /> : null}
