@@ -12,3 +12,8 @@ pytest
 ruff
 mypy
 defusedxml
+pypdf
+python-docx
+openpyxl
+types-openpyxl
+pillow

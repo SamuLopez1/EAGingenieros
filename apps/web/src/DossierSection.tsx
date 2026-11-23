@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import { DocumentExtraction } from "./DocumentExtraction";
 import { ApiError } from "./api/client";
 import {
   downloadDocument,
@@ -184,6 +185,9 @@ export function DossierSection({
                       )}>Volver a analizar</button>
                     ) : null}
                   </div>
+                  {item.status === "disponible" ? (
+                    <DocumentExtraction opportunityId={opportunityId} documentId={item.id} version={item.version} />
+                  ) : null}
                 </li>
               ))}
             </ul>

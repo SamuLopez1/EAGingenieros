@@ -29,7 +29,10 @@ def main() -> None:
     parser.add_argument("--public", action="store_true", help="Prueba acotada con SECOP real")
     parser.add_argument("--browser-cli", type=Path, help="Ruta a playwright-cli.js")
     parser.add_argument("--dossier", action="store_true", help="Prueba A/B/A con archivos sintéticos")
+    parser.add_argument("--extraction", action="store_true", help="Incluye extracción y fallos en la prueba A/B/A")
     args = parser.parse_args()
+    if args.extraction and (not args.dossier or not args.browser_cli):
+        parser.error("--extraction requiere --dossier y --browser-cli")
     if args.dossier and args.public:
         parser.error("--dossier usa únicamente datos sintéticos")
     assert 1 <= args.duration <= 3600
@@ -74,6 +77,8 @@ def main() -> None:
     vite = None
     vite_config = None
     engine = None
+    extraction_stop = threading.Event()
+    extraction_thread = None
 
     def docker(*parts: str) -> str:
         try:
@@ -323,6 +328,7 @@ def main() -> None:
             _env_file=None,
             database_url=SecretStr(url.render_as_string(hide_password=False)),
             document_download_secret=SecretStr(secrets.token_hex(32)) if args.dossier else None,
+            extraction_timeout_seconds=15 if args.extraction else 90,
             **auth_config,
         )
         app = create_app(settings)
@@ -339,6 +345,20 @@ def main() -> None:
             app.state.document_services = replace(
                 app.state.document_services, scanner=FixtureScanner()
             )
+
+        if args.extraction:
+            from app.db.session import create_session_factory
+            from app.documents.extraction_worker import run_one
+
+            factory = create_session_factory(engine)
+
+            def consume_extractions() -> None:
+                while not extraction_stop.is_set():
+                    if not run_one(factory, settings):
+                        extraction_stop.wait(0.2)
+
+            extraction_thread = threading.Thread(target=consume_extractions, daemon=True)
+            extraction_thread.start()
 
         @app.middleware("http")
         async def prevent_secop(request: Request, call_next):
@@ -423,7 +443,8 @@ def main() -> None:
                 "mvp07_browser_check.js" if args.dossier else "mvp06_browser_check.js"
             ))
             try:
-                subprocess.run([*browser, "open", origin, "--browser=chrome"],
+                url = origin + ("?qa_extraction=1" if args.extraction else "")
+                subprocess.run([*browser, "open", url, "--browser=chrome"],
                                check=True, stdout=subprocess.DEVNULL, timeout=35, cwd=browser_output)
                 checked = subprocess.run(
                     [*browser, "run-code", "--filename", check_script],
@@ -453,6 +474,9 @@ def main() -> None:
             vite_config.unlink(missing_ok=True)
         for server in servers:
             server.should_exit = True
+        extraction_stop.set()
+        if extraction_thread is not None:
+            extraction_thread.join(timeout=22)
         if engine is not None:
             engine.dispose()
         ownership = subprocess.run(
