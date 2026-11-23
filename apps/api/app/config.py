@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import cached_property
+from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
 from uuid import UUID
@@ -42,6 +43,14 @@ class Settings(BaseSettings):
     secop_max_retries: int = Field(default=2, ge=0, le=5)
     secop_max_requests: int = Field(default=50, ge=1)
     catalog_stale_after_hours: int = Field(default=24, ge=1, le=8760)
+
+    document_max_bytes: int = Field(default=50 * 1024**2, ge=1, le=100 * 1024**2)
+    dossier_max_bytes: int = Field(default=300 * 1024**2, ge=1, le=1024**3)
+    document_retention_days: int = Field(default=30, ge=1, le=365)
+    document_download_secret: SecretStr | None = Field(default=None, min_length=32)
+    document_clamav_host: str | None = None
+    document_clamav_port: int = Field(default=3310, ge=1, le=65535)
+    official_document_manifest: Path | None = None
 
     @property
     def database_is_configured(self) -> bool:

@@ -1,3 +1,4 @@
+import { DossierSection } from "./DossierSection";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import {
@@ -359,6 +360,7 @@ export default function OpportunitiesPage({ role }: { role: "administrador" | "a
                 ) : (
                   <p>La fuente no informó un enlace oficial válido.</p>
                 )}
+                <DossierSection key={item.id} opportunityId={item.id} role={role} />
               </>
             ) : null}
           </section>

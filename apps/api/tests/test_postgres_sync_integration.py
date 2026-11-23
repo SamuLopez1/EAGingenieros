@@ -321,3 +321,21 @@ def test_catalog_migration_backfills_mvp05_rows(postgres_engine: Engine) -> None
         assert (item.department, item.city) == ("Antioquia", "Medellín")
         assert item.reception_at == datetime(2026, 11, 27, 11, 20, tzinfo=UTC)
         assert item.raw_payload == source
+
+
+def test_dossier_migration_blocks_sql_client_roles(postgres_engine: Engine) -> None:
+    config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    with postgres_engine.begin() as connection:
+        connection.execute(text("CREATE ROLE anon"))
+        connection.execute(text("CREATE ROLE authenticated"))
+        connection.execute(text("ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO anon"))
+        connection.execute(text("ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO authenticated"))
+    command.upgrade(config, "20261122000003")
+    with postgres_engine.connect() as connection:
+        rows = connection.execute(text("""
+            SELECT relrowsecurity, has_table_privilege('anon', oid, 'SELECT'),
+                   has_table_privilege('authenticated', oid, 'SELECT')
+            FROM pg_class
+            WHERE relname IN ('opportunity_documents', 'opportunity_document_contents')
+        """)).all()
+        assert rows == [(True, False, False)] * 2

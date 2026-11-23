@@ -429,3 +429,21 @@ td.is-unknown {
 .catalog-validity--vencido { color: #7b421d; background: #fff5e9; }
 .catalog-validity--desconocida { color: #4f4b40; background: #f8f4eb; }
 .detail-source-note { max-width: 65ch; }
+
+.dossier { margin-top: 1.5rem; border-top: 1px solid var(--hairline); padding-top: 1.25rem; }
+.dossier-form { display: grid; gap: .7rem; max-width: 32rem; margin-block: 1rem; }
+.dossier-form label { display: grid; gap: .3rem; font-weight: 500; min-width: 0; }
+.dossier-form input, .dossier-form select {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+  padding: .5rem;
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: .4rem;
+}
+.dossier-form button { justify-self: start; }
+.dossier-list { padding: 0; list-style: none; margin-block: .75rem; }
+.dossier-list li { padding: .65rem 0; border-bottom: 1px solid var(--hairline); overflow-wrap: anywhere; }
+.dossier-list p { margin: .3rem 0; }
+.dossier-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
