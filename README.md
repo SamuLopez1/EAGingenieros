@@ -15,7 +15,7 @@ Repositorio en preparación: contiene el plan de implementación y el backlog, *
 
 Las instrucciones breves para los agentes están en [AGENTS.md](AGENTS.md). Los documentos internos, datos reales, credenciales y entregables académicos locales no forman parte del repositorio.
 
-## Estructura base local (MVP-03)
+## Estructura base local y acceso (MVP-03–04)
 
 Requisitos comprobados en esta base: Python 3.14 y Node.js 24. No requiere
 SECOP, Supabase, Redis, OpenAI, credenciales ni servicios de pago.
@@ -52,6 +52,47 @@ para el contrato y la generación futura del cliente TypeScript.
 El smoke inicia sus propios procesos y requiere libres los puertos locales
 `8000` y `5173`. La API arranca desde `apps/api` y carga el archivo local no
 versionado `apps/api/.env` si existe, igual que en el arranque manual.
+
+### Acceso con correo y contraseña (usuarios provisionados)
+
+La UI permite iniciar sesión con correo y contraseña mediante
+`supabase.auth.signInWithPassword({ email, password })`, sin registro público.
+La contraseña se entrega únicamente al SDK de Supabase, se vacía del formulario
+al enviar y no se envía a la API propia ni se incorpora a logs o errores.
+La UI conserva persistencia, eventos de sesión y cierre de sesión; solo muestra
+acceso autenticado después de validar el JWT y los permisos en `/auth/session`.
+
+El navegador solo usa `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY`.
+Nunca añada claves de servicio, contraseñas, tokens ni datos personales a Git,
+`VITE_*`, OpenAPI o logs. Sin configuración, la UI informa el pendiente.
+
+Para probar el proyecto dummy se provisionan manualmente, desde Authentication
+> Users, dos cuentas sintéticas con **Auto confirm user** activado y contraseñas
+que no se registran en este repositorio:
+
+| Cuenta sintética | Rol EAG |
+| --- | --- |
+| `eag.admin.dummy@example.com` | `administrador` |
+| `eag.analista.dummy@example.com` | `analista` |
+
+Después de crearlas, ejecutar
+`supabase/tests/provision_dummy_password_users.sql` como administrador de la
+base de datos del proyecto dummy. El fixture crea perfiles, membresías EAG y
+auditoría mínima de forma idempotente, sin credenciales. No es una migración ni
+debe aplicarse a un proyecto de EAG. La recuperación de contraseña queda
+pendiente y no tiene interfaz en esta versión.
+
+Se conservan las invitaciones administrativas, revocación, auditoría, roles,
+RLS y todas las migraciones. El aprovisionamiento sigue siendo responsabilidad
+del backend o de un administrador autorizado. El reenvío de invitaciones mantiene
+la limitación documentada (501); SMTP y su validación siguen pendientes.
+
+El cambio agiliza el entorno dummy, sin constituir validación de EAG. Según la
+confirmación del usuario, Supabase rechaza la solicitud de magic link antes de
+enviarlo: **el flujo passwordless no está integrado ni funcionando**. Se retiró
+su solicitud de la UI. Consulte la [matriz de permisos](docs/MATRIZ_DE_PERMISOS.md),
+la [arquitectura](docs/ARQUITECTURA_BASE.md) y el
+[diagnóstico y comandos de verificación offline](docs/AUTH_DIAGNOSTICO.md).
 
 Riesgo conocido: esta base no valida cobertura documental de SECOP. Mantiene el
 spike y su recomendación de carga manual complementaria, sin convertirlos en

@@ -1,6 +1,6 @@
 # Backlog del MVP
 
-Las 14 issues están publicadas en [GitHub](https://github.com/SamuLopez1/EAGingenieros/issues). Este índice no representa avance: consultar el estado vivo de cada issue. Se desglosaron los diez hitos del plan en entregas revisables; si una issue no cabe en un PR manejable, acordar una subdivisión antes de implementarla.
+Las 14 issues principales están publicadas en [GitHub](https://github.com/SamuLopez1/EAGingenieros/issues). Este índice no representa avance: consultar el estado vivo de cada issue. Se desglosaron los diez hitos del plan en entregas revisables; si una issue no cabe en un PR manejable, acordar una subdivisión antes de implementarla. El [reenvío seguro de invitaciones #22](https://github.com/SamuLopez1/EAGingenieros/issues/22) se sigue como trabajo complementario de MVP-04, sujeto a aceptación humana del alcance.
 
 | Issue | Entrega | Depende de | Modelo sugerido |
 | --- | --- | --- | --- |

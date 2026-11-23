@@ -1,0 +1,361 @@
+# Diagnóstico de autenticación MVP-04
+
+Este diagnóstico corresponde a la issue #4 y al PR #19 hacia `dev`.
+La entrega y aceptación de la primera invitación por correo siguen pendientes.
+El reenvío se sigue en la issue #22.
+
+## Revisión del PR #19 (2026-11-22)
+
+Se verificó el código de `cb9c258` en un worktree aislado. La dependencia #3
+continúa abierta en GitHub. Las pruebas offline se ejecutaron primero, con
+fixtures sintéticas y sin configuración del proveedor en el worktree.
+
+| Comprobación | Resultado |
+| --- | --- |
+| Offline y CI | Ruff y mypy correctos, 25 pruebas de API, 22 de web y 11 del spike aprobadas. Lint, typecheck y build web correctos. Los jobs `api` y `web` de GitHub pasaron en `cb9c258`. |
+| Configuración real de Supabase dummy | Auth health, JWKS y configuración pública respondieron 200. El proveedor confirmó registro desactivado y acceso con email habilitado. La clave de servicio se mantuvo en backend y el navegador recibió configuración publicable. |
+| Analista en Chrome | Login de Supabase 200, API por proxy 200 con el rol y la organización esperados, sesión conservada tras recarga, logout 204 y formulario anónimo tras recarga. Supabase rechazó el refresh de esa sesión con 400. |
+| Autorización y RLS reales | Anónimo directo y por proxy, y bearer inválido, obtuvieron 401. Un JWT válido sin membresía, una organización ajena y una acción administrativa del analista devolvieron 403. Con el JWT de analista, RLS mostró una membresía propia y cero filas para la membresía de otra cuenta y para la invitación. |
+| Revocación real | Antes de revocar, la API respondió 200. La pasarela ejecutó la RPC y eliminó el usuario Auth. Con el mismo JWT, la API respondió 403 y RLS devolvió cero filas. El refresh devolvió 400 y la comprobación Auth Admin devolvió 404. Se retiraron las dos cuentas temporales de Auth y quedaron los registros sintéticos de auditoría. |
+| Administrador y revocación por HTTP | La asignación del rol a la fixture temporal por PostgREST devolvió 403. El control del navegador perdió su sesión al intentar verificar el acceso al panel. Quedan pendientes el nuevo login/logout administrativo y el recorrido de éxito por `DELETE /auth/invitations/{invitation_id}`. El login administrativo de septiembre y las pruebas offline de la ruta se conservan como evidencia separada. |
+| Primera invitación | Sigue sin identificarse un buzón de prueba autorizado. La creación de fixtures usó Auth Admin con confirmación previa, sin envío de correo. Entrega y aceptación quedan pendientes. |
+
+Comandos ejecutados desde el worktree del PR con el entorno Python existente.
+La ejecución local con Supabase usó solo el proyecto dummy y procesos en
+`127.0.0.1`. El wrapper y su comprobación Playwright son archivos locales en
+`tmp`, ignorados por Git. Emiten estados y recuentos sin credenciales ni tokens.
+
+```powershell
+$env:PYTHONPATH = 'apps/api'
+$py = '../../apps/api/.venv/Scripts/python.exe'
+& $py -m ruff check apps/api
+& $py -m mypy --config-file apps/api/pyproject.toml apps/api/app
+& $py -m pytest -c apps/api/pyproject.toml apps/api/tests
+python -m unittest discover -s tests -p 'test_*.py'
+npm run lint --prefix apps/web
+npm run typecheck --prefix apps/web
+npm run test --prefix apps/web
+npm run build --prefix apps/web
+& $py ../verify_mvp04_pr19.py
+```
+
+El wrapper devolvió código 3 por la validación administrativa incompleta.
+El diagnóstico de red y el control de los procesos locales se ejecutaron con
+acceso autorizado. Pytest mantuvo dos avisos de deprecación de dependencias.
+
+### Reintento de una revocación parcial
+
+La prueba offline con PostgreSQL 17.6 reprodujo el rechazo de la RPC original
+(`active invitation not found`) al reintentar después de retirar la
+membresía y conservar el usuario de Auth. La prueba HTTP, con Auth simulado,
+reprodujo el 503 adicional si Auth indicaba que el usuario ya estaba ausente.
+
+La migración `20261122000000_idempotent_invitation_revocation.sql`
+mantiene la RPC y sus permisos. Cada llamada vuelve a verificar el rol y la
+organización. Un bloqueo de fila serializa las llamadas sobre la misma
+invitación. El primer intento retira la membresía y registra la auditoría.
+Si la invitación ya está revocada, la pasarela puede volver a intentar el
+borrado en Auth. Un HTTP 404 con `user_not_found` confirma que Auth ya no
+tiene ese usuario. Las demás respuestas fallidas mantienen el 503.
+[Códigos de Supabase Auth](https://supabase.com/docs/guides/auth/debugging/error-codes).
+
+Con la corrección, PostgreSQL confirmó una sola auditoría de revocación,
+la membresía ausente y el rechazo a un analista y una organización ajena.
+La prueba HTTP confirmó 503 tras el borrado simulado fallido, 200 al
+reintentar y 200 con el usuario ya ausente. El JWT anterior recibió 403
+durante toda la recuperación. Una petición anónima recibió 401 y ni el
+analista ni un administrador de otra organización pudieron borrar en Auth.
+
+Desde la raíz del repositorio, con Docker iniciado y la imagen local
+`postgres:17.6-bookworm`, el runner crea una base desechable sin red, aplica
+las migraciones y ejecuta la fixture SQL. El primer comando reproduce el
+fallo original y devuelve código 3. El segundo debe devolver 0.
+
+```powershell
+python supabase/tests/run_auth_revocation_offline.py --legacy
+python supabase/tests/run_auth_revocation_offline.py
+
+$env:PYTHONPATH = 'apps/api'
+& apps/api/.venv/Scripts/python.exe -m pytest -c apps/api/pyproject.toml apps/api/tests
+& apps/api/.venv/Scripts/python.exe -m ruff check apps/api
+& apps/api/.venv/Scripts/python.exe -m mypy --config-file apps/api/pyproject.toml apps/api/app
+```
+
+Pasaron 29 pruebas de API, Ruff y mypy. Pytest emitió los dos avisos de
+deprecación ya registrados.
+
+La corrección se comprobó offline. Queda aplicar la migración en el entorno
+autorizado antes de validar allí los reintentos. La entrega y aceptación de
+la primera invitación siguen pendientes de un buzón de prueba autorizado.
+
+## Revocación real controlada (2026-09-25)
+
+Se probó exclusivamente en `eag-mvp-auth-dummy`, con una cuenta sintética
+desechable `example.invalid` y contraseña aleatoria no registrada. Se creó el
+usuario mediante Auth Admin, se registró perfil, membresía, invitación y
+auditoría mediante `record_eag_invitation`, y se obtuvo un JWT real con login
+por contraseña. Antes de revocar, `/auth/session` devolvió 200, una ruta
+administrativa y una organización ajena devolvieron 403, y RLS mostró una
+única membresía propia. Se llamó al gateway real de revocación, que ejecutó
+`revoke_eag_invitation` y eliminó el usuario Auth. Con **el mismo JWT**,
+`/auth/session` devolvió 403 y RLS devolvió cero filas; el refresh devolvió
+400 y la búsqueda Auth Admin del usuario, 404. La prueba terminó con estado
+correcto y sin cuenta sintética restante. No se imprimieron ni guardaron JWT,
+contraseña ni claves.
+
+Comandos ejecutados desde `apps/api`, con acceso de red acotado al proyecto
+dummy y al API local (el script de prueba fue local e ignorado por Git):
+
+```powershell
+.\.venv\Scripts\ruff.exe check ..\..\tmp\mvp04_live_revocation.py
+.\.venv\Scripts\python.exe -m py_compile ..\..\tmp\mvp04_live_revocation.py
+$env:PYTHONPATH = (Get-Location).Path
+.\.venv\Scripts\python.exe ..\..\tmp\mvp04_live_revocation.py
+.\.venv\Scripts\python.exe ..\..\tmp\mvp04_live_revocation.py --run
+```
+
+Resultados: Ruff y compilación correctos; `preflight=ok`; creación Auth 200;
+RPC de registro 204; login 200; controles previos 200/403/403 y una fila RLS;
+revocación correcta; controles posteriores 403, cero filas RLS, refresh 400 y
+usuario Auth 404. La creación de la fixture **no envió una invitación por
+correo**; por tanto, no demuestra entrega, aceptación del enlace, contraseña
+inicial ni recuperación. La prueba llama al gateway de revocación; no es una
+prueba E2E de la ruta HTTP administrativa de revocación.
+
+## Invitación backend sin buzón controlado (2026-09-25)
+
+El usuario pidió probar solo el backend y confirmó que no dispone de un buzón
+de prueba controlado. Dos solicitudes de invitación reales, con direcciones
+únicas del dominio no entregable `example.invalid`, llegaron al endpoint
+`/auth/v1/invite` del proyecto dummy. Supabase devolvió HTTP 400; el gateway
+lo convirtió en `InvitationProviderUnavailable`. La búsqueda Auth Admin
+posterior no encontró cuentas residuales. No hubo entrega ni aceptación de
+correo, ni registro de invitación o membresía. Por tanto, el flujo de creación
+de invitaciones no está validado de extremo a extremo.
+
+Comandos: `ruff check` y `py_compile` del script local ignorado
+`tmp/mvp04_live_invite.py` correctos; preflight de Auth Admin 200; ejecución
+`--run` con resultado `provider_status=400 endpoint=/auth/v1/invite` y
+`cleanup_partial_auth=not_needed`. Se solicitó un intento con un dominio
+reservado de formato aceptado por proveedores de correo, pero la revisión
+automática lo rechazó porque podía generar correo a un destino no controlado.
+Ese intento no se ejecutó. Se requiere un buzón autorizado para continuar.
+
+## Pasos para cerrar MVP-04
+
+1. EAG confirma la aceptación técnica de la dependencia MVP-03 y el entorno
+   Supabase definitivo (o declara que el dummy basta para aceptar MVP-04).
+2. El reenvío se registró en la issue #22 y la ruta actual devuelve 501. EAG
+   confirma durante la revisión que este alcance se puede aceptar por separado.
+3. Para validar invitación completa, preparar un buzón de prueba controlado y
+   autorizar su uso. Un administrador invita desde la API; comprobar Auth,
+   perfil, membresía y auditoría, recibir y aceptar el correo, iniciar sesión,
+   comprobar rol y aislamiento, revocar y confirmar 403 con el JWT anterior y
+   fallo de refresh. Registrar solo códigos y resultados, sin correo, JWT,
+   contraseña, claves ni enlaces de invitación.
+4. Revisar PR #19 contra los criterios de `docs/issues/MVP-04.md` y aprobarlo
+   mediante una persona de EAG. La revisión automática de Copilot no equivale
+   a aprobación humana. Confirmar CI `api` y `web` en verde para el commit final.
+5. Tras la aceptación humana, fusionar PR #19 a `dev` según el proceso de EAG,
+   verificar que la rama integrada conserve las comprobaciones y cerrar la
+   issue #4 con enlace al PR y a esta evidencia. No cerrarla solo por el push.
+
+## Login real del analista y diagnóstico JWKS (2026-09-24)
+
+Después de introducir las credenciales únicamente en la UI local, Supabase
+creó una sesión, pero `/auth/session` devolvió 401 y la UI mostró un error de
+autorización. El diagnóstico del backend identificó
+`PyJWKClientConnectionError`: el proceso API local, iniciado sin acceso de red,
+no podía descargar el JWKS público. Una petición `urllib` desde ese mismo
+entorno falló con `URLError`; la consulta pública JWKS con acceso de red
+respondió con una clave ES256. No se registraron JWT ni claves.
+
+Se corrigió la clasificación del error: si falla la descarga de JWKS, la API
+devuelve 503 y no confunde indisponibilidad del proveedor con token inválido
+(401). Una prueba offline cubre esa distinción. Con la API local ejecutada con
+acceso de red, el mismo JWT produjo HTTP 200 en `/auth/session` y la UI mostró
+"Sesión autenticada" con rol `analista` asignado por el servidor. Una recarga
+conservó la sesión. Se cerró sesión desde la UI y otra recarga mostró el
+formulario anónimo. Son comprobaciones reales contra el proveedor dummy, sin
+guardar ni mostrar contraseña o token.
+
+Después, el usuario inició sesión con la cuenta administradora dummy en la
+misma UI. Se observó "Sesión autenticada" y rol `administrador` devuelto por
+el servidor; una recarga conservó la sesión. No se leyó ni guardó la contraseña
+o el JWT. La revocación real de una cuenta separada se comprobó el 2026-09-25,
+como se registra arriba. La revisión humana aún impide cerrar la issue.
+
+## Incidente de disponibilidad del dummy (2026-09-24)
+
+El panel de Supabase mostró `eag-mvp-auth-dummy` en estado **paused**. Se usó
+`Resume project` con autorización del usuario. El panel pasó por `Restoration in
+progress` y `Coming up`, y confirmó `Restoration complete`. Durante el arranque
+JWKS respondió HTTP 502; después respondió 200 y Auth health respondió 200 con
+la clave publicable. El panel terminó mostrando `Healthy`. Una consulta agregada
+en SQL Editor confirmó las dos
+cuentas sintéticas con correo confirmado, perfil y rol esperado. En ese momento
+esto aún no demostraba login/logout con contraseña ni revocación real; el
+login/logout analista se comprobó posteriormente como se indica arriba.
+
+Se descubrió además un defecto de permisos independiente de la pausa: con la
+clave de servidor, Auth Admin devolvió 200 pero `GET` de `invitations` en
+PostgREST devolvió HTTP 403 / SQLSTATE `42501`. `has_table_privilege` confirmó
+que `service_role` carecía de `SELECT` en esa tabla. También faltaba `SELECT`
+para `authenticated` en `invitations` y `audit_events`, aunque las políticas RLS
+reservan su lectura a administradores. Con autorización se aplicó al dummy la
+migración `20260924000000_service_invitation_read.sql`: SQL Editor informó
+éxito, `service_role` leyó `invitations` por PostgREST con HTTP 200 y la consulta
+de privilegios devolvió `true` para las tres lecturas previstas, `false` para
+`anon` y `false` para escritura de `authenticated` en invitaciones. No se
+concedió lectura de auditoría a `service_role`.
+
+En transacciones con `SET LOCAL ROLE authenticated`, una comprobación con el
+analista sintético confirmó perfil, pertenencia y organización propios, sin
+visibilidad de auditoría ni invitaciones; otra con el administrador confirmó la
+lectura de las dos pertenencias de EAG y de auditoría. Ambas terminaron con
+`ROLLBACK` y sin cambios de datos. Son pruebas SQL/RLS reales, no login E2E.
+
+Un proyecto pausado puede responder HTTP 540; la API debe fallar cerrada con 503
+si su consulta de pertenencia recibe un error del proveedor. Hay una prueba
+offline sintética para ese caso y otra para negar un JWT ya emitido después de
+retirar la pertenencia simulada. La revocación real de Supabase se comprobó
+posteriormente con una cuenta separada, como se registra arriba.
+
+Para diagnosticar una interrupción futura: revisar primero el estado del proyecto
+en el panel; después probar salud/JWKS, login y `/auth/session` en ese orden. No
+interpretar un fallo de DNS, HTTP 502 o 540 como contraseña incorrecta. No usar
+la API de negocio ni afirmar disponibilidad hasta verificar la sesión completa.
+
+## Cambio a correo y contraseña (2026-09-08)
+
+Hecho confirmado por el usuario: UI, API, proxy, JWT/JWKS y configuración local
+están operativos. Supabase rechaza la solicitud de magic link antes de enviarlo.
+No se conoce aquí un código de error adicional y no se inventa su causa.
+**El flujo passwordless no está integrado ni funcionando.** Se sustituye su
+solicitud en la UI para agilizar el entorno dummy; no es una validación de EAG.
+
+El login usa únicamente `supabase.auth.signInWithPassword({ email, password })`.
+No crea cuentas. La contraseña va solo al SDK de Supabase: el formulario la vacía
+al enviar, no la guarda en estado React ni en atributos HTML, y no la incorpora
+a errores o logs. El adaptador sanitiza errores devueltos y excepciones del SDK.
+Los mensajes no confirman existencia de correo, invitación o membership.
+
+Se mantiene esta secuencia: sesión Supabase → evento de Auth → `getSession()` →
+JWT a `/auth/session` → rol de la API. El SDK no concede permisos de EAG por sí
+solo. Persistencia, refresh, suscripción, limpieza al desmontar y rechazo de
+respuestas tardías siguen activos. La detección del callback de invitación
+administrativa sigue cubierta; no se solicita magic link desde la UI.
+
+No se consultaron valores de `.env`, claves, JWT, cuentas ni datos de Supabase
+para implementar este cambio. No se crearon ni modificaron cuentas o contraseñas.
+
+## Provisionamiento y validaciones restantes
+
+Un administrador autorizado debe provisionar el usuario dummy con contraseña,
+correo confirmado, perfil y membership de EAG con rol administrador o analista.
+Las credenciales se introducen únicamente en la UI local, nunca en Git, mensajes,
+capturas o logs. El flujo login → rol devuelto por API → recarga con sesión
+persistida → logout ya se probó con la cuenta analista dummy. El login y la
+persistencia se comprobaron también con la cuenta administradora dummy. La
+revocación real se probó después con una cuenta sintética separada.
+
+La recuperación de contraseña queda pendiente y no se implementa. Se conservan
+backend de invitaciones, revocación, auditoría, roles, RLS y migraciones. La
+revocación y el rechazo del refresh se comprobaron con el proveedor real. SMTP,
+reenvío de invitaciones (501, issue #22) y revisión humana mantienen sus
+pendientes. No se fusiona el PR ni se cierra la issue; la aceptación de EAG no
+se presume.
+
+## Evidencia histórica conservada
+
+- En la sesión del 2026-09-07, `App` solo consultaba una vez la sesión. Una prueba
+  offline reprodujo que un evento posterior no provocaba una nueva consulta.
+  Se añadió suscripción y protección ante respuestas tardías.
+- Un valor vacío de `VITE_API_BASE_URL` enviaba `/auth/session` al servidor web.
+  Se reprodujo offline y se corrigió el fallback a `/api/auth/session`.
+- El SDK instalado espera `initializePromise` dentro de `getSession()`. Las
+  pruebas sintéticas anteriores de hash no demostraron integración passwordless.
+  No se reprodujo una carrera de inicialización del SDK.
+- Las rutas locales no fueron accesibles en la primera sesión. Un smoke aislado
+  sí pasó; posteriormente se confirmó UI/health directa y proxy 200 y sesión
+  anónima directa/proxy 401 con los procesos configurados.
+- El 2026-09-08 se comprobó en el panel dummy: Site URL y única Redirect URL
+  `http://127.0.0.1:5173`; Email habilitado; registro público y acceso anónimo
+  desactivados. Consulta agregada: un usuario Auth, un perfil y una membership
+  de administrador de EAG; RLS habilitada. No se exportaron identidades.
+- Bajo el rol SQL `authenticated`, perfil y membership fallaron con SQLSTATE
+  `42501`, `permission denied for table profiles/organization_memberships`.
+  Faltaba SELECT, aunque existían políticas RLS. El resolver convierte la
+  denegación de PostgREST en 403.
+- Se aplicó con autorización `20260908000000_auth_read_grants.sql`: SELECT sobre
+  profiles, organization_memberships y organizations sujeto a RLS, sin escrituras
+  ni grants a anon. La comprobación equivalente a
+  `supabase/tests/auth_read_access.sql` pasó en PostgreSQL real: acceso propio
+  permitido, sujeto ajeno y anon sin filas protegidas, sin cambio de membership.
+  Esta evidencia SQL no sustituye un JWT real desde navegador.
+- JWKS público accesible, una clave ES256, sin registrar material de clave ni kid.
+- La revisión automática bloqueó un experimento de generación de magic link por
+  requerir acceso interno a clave/correo contra la restricción del usuario. No se
+  ejecutó. Ese experimento se abandona; no es un paso del nuevo login.
+- Antes de este cambio, CI API/web estaba verde en `7d35844`; Git estaba limpio.
+  La dependencia #3 seguía abierta, sin dar por concluida su aceptación.
+
+## Pruebas offline y comandos
+
+Las pruebas usan únicamente placeholders no válidos, cuentas de ejemplo y mocks.
+Cubren credenciales correctas simuladas → sesión SDK → `/auth/session` → rol del
+servidor (ignorando el rol del cliente), errores genéricos, sesión ausente,
+401/403/503, logout, no registro público y ausencia de contraseña en peticiones
+a la API propia, logs, errores, HTML serializado, health y OpenAPI. No se guardan
+snapshots de credenciales. Se conservan las pruebas de JWT/firma/ES256, issuer,
+audience, expiración, roles, escalada, aislamiento, CORS y secretos.
+
+Desde la raíz, sin cargar el `.env` de `apps/api`:
+
+```powershell
+$env:PYTHONPATH = 'apps/api'
+& apps/api/.venv/Scripts/python.exe -m ruff check apps/api
+& apps/api/.venv/Scripts/python.exe -m mypy --config-file apps/api/pyproject.toml apps/api/app
+& apps/api/.venv/Scripts/python.exe -m pytest -c apps/api/pyproject.toml apps/api/tests
+python -m unittest discover -s tests -p 'test_*.py'
+npm run lint --prefix apps/web
+npm run typecheck --prefix apps/web
+```
+
+Para impedir que Vite/Vitest carguen `.env`, usar un wrapper recreable e ignorado:
+
+```powershell
+New-Item -ItemType Directory -Force apps/web/node_modules/.cache | Out-Null
+Set-Content apps/web/node_modules/.cache/eag-verification.config.ts 'import config from "../../vite.config.ts"; export default { ...config, envDir: false };'
+npm run test --prefix apps/web -- --config node_modules/.cache/eag-verification.config.ts
+npm run build --prefix apps/web -- --config node_modules/.cache/eag-verification.config.ts
+```
+
+El smoke de este cambio usa procesos temporales en puertos 18000/15173, API con
+cwd aislado y Vite con el wrapper sin `.env`. Comprueba health, OpenAPI, UI,
+proxy y 401 anónimo. No contacta Supabase ni consume sesiones existentes.
+Comando ejecutado: `python tmp/smoke_password_offline.py` (wrapper local ignorado).
+Resultado: correcto. La primera creación del wrapper falló porque no existía
+`tmp`; se creó esa carpeta y se repitió correctamente, sin leer `.env`.
+
+Resultados finales: lint y typecheck web correctos; 22 pruebas web; ruff y mypy
+correctos; 21 pruebas API; 11 pruebas spike; build correcto; smoke aislado correcto.
+Persisten dos avisos de deprecación de Starlette/httpx/anyio, sin fallos.
+No se ejecutaron pruebas de red contra Supabase durante este cambio.
+
+## Conservación y limpieza
+
+No se eliminan archivos. Se sustituye el método de login y sus pruebas/textos,
+y se retira solo la variante magic-link de la prueba de callback, conservando la
+invitación administrativa. Se retiran instrucciones operativas de diagnóstico
+passwordless obsoletas, conservando arriba sus fallos y evidencia histórica.
+No se borran spike, pruebas de autorización, migraciones, lockfiles, CI,
+`.env.example`, `.gitignore` ni archivos de arquitectura. Los wrappers y salidas
+locales son recreables y ya están ignorados; no se leen ni borran `.env`.
+
+## Fuentes oficiales
+
+- [signInWithPassword](https://supabase.com/docs/reference/javascript/auth-signinwithpassword)
+- [Eventos de autenticación](https://supabase.com/docs/reference/javascript/auth-onauthstatechange)
+- [Inicialización](https://supabase.com/docs/reference/javascript/auth-initialize)
+- [Invitaciones administrativas](https://supabase.com/docs/reference/javascript/auth-admin-inviteuserbyemail)

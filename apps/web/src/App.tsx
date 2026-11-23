@@ -1,5 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { FormEvent } from "react";
 
+import { browserAuthClient, SessionCheckError, signInErrorMessage } from "./auth";
+import type { AuthClient, SessionState } from "./auth";
 import { fetchHealth } from "./health";
 
 type ConnectionState =
@@ -8,9 +11,22 @@ type ConnectionState =
   | { kind: "error" };
 
 const loadingState: ConnectionState = { kind: "loading" };
+type AuthViewState = { kind: "loading" } | { kind: "error"; message: string } | SessionState;
+const loadingAuthState: AuthViewState = { kind: "loading" };
 
-export function App({ loadHealth = fetchHealth }: { loadHealth?: typeof fetchHealth }) {
+export function App({
+  loadHealth = fetchHealth,
+  authClient = browserAuthClient,
+}: {
+  loadHealth?: typeof fetchHealth;
+  authClient?: AuthClient;
+}) {
   const [connection, setConnection] = useState<ConnectionState>(loadingState);
+  const [auth, setAuth] = useState<AuthViewState>(loadingAuthState);
+  const [email, setEmail] = useState("");
+  const passwordInput = useRef<HTMLInputElement>(null);
+  const [signingIn, setSigningIn] = useState(false);
+  const [loginMessage, setLoginMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -24,10 +40,113 @@ export function App({ loadHealth = fetchHealth }: { loadHealth?: typeof fetchHea
     return () => controller.abort();
   }, [loadHealth]);
 
+  useEffect(() => {
+    let active = true;
+    let revision = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    function refresh() {
+      const current = ++revision;
+      clearTimeout(timer);
+      setAuth(loadingAuthState);
+      // Salir del callback de Supabase antes de invocar métodos de Auth.
+      timer = setTimeout(() => {
+        authClient.loadSession().then((session) => {
+          if (active && current === revision) setAuth(session);
+        }).catch((error: unknown) => {
+          if (active && current === revision) {
+            setAuth({ kind: "error", message: error instanceof SessionCheckError
+              ? error.message : "No fue posible comprobar la sesión." });
+          }
+        });
+      }, 0);
+    }
+    const unsubscribe = authClient.onSessionChange(refresh);
+    refresh();
+    return () => {
+      active = false;
+      clearTimeout(timer);
+      unsubscribe();
+    };
+  }, [authClient]);
+
+  async function submitLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (signingIn) return;
+    setLoginMessage(null);
+    const password = passwordInput.current?.value ?? "";
+    // Campo no controlado: no copiar la contraseña a estado, HTML o mensajes.
+    if (passwordInput.current) passwordInput.current.value = "";
+    setSigningIn(true);
+    try {
+      await authClient.signIn(email, password);
+    } catch {
+      setLoginMessage(signInErrorMessage);
+    } finally {
+      setSigningIn(false);
+    }
+  }
+
+  async function signOut() {
+    try {
+      await authClient.signOut();
+      setLoginMessage(null);
+      setAuth({ kind: "anonymous" });
+    } catch {
+      setLoginMessage("No fue posible cerrar la sesión. Inténtalo de nuevo.");
+    }
+  }
+
   return (
     <main>
       <h1>EAG Ingenieros</h1>
-      <p>Base técnica inicial: sin módulos de negocio ni decisiones automáticas.</p>
+      <p>Acceso para usuarios provisionados: sin registro público ni módulos de negocio.</p>
+      <section aria-label="Sesión">
+        <h2>Sesión</h2>
+        {auth.kind === "loading" ? <p role="status">Comprobando sesión…</p> : null}
+        {auth.kind === "configuration-required" ? (
+          <p role="alert">El inicio de sesión está pendiente de configuración por EAG.</p>
+        ) : null}
+        {auth.kind === "error" ? (
+          <div>
+            <p role="alert">{auth.message}</p>
+            <button type="button" onClick={signOut}>Cerrar sesión</button>
+          </div>
+        ) : null}
+        {auth.kind === "anonymous" ? (
+          <form onSubmit={submitLogin}>
+            <label htmlFor="email">Correo</label>
+            <input
+              id="email"
+              type="email"
+              autoComplete="username"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              required
+            />
+            <label htmlFor="password">Contraseña</label>
+            <input
+              ref={passwordInput}
+              id="password"
+              type="password"
+              autoComplete="current-password"
+              required
+            />
+            <button type="submit" disabled={signingIn}>
+              {signingIn ? "Iniciando sesión…" : "Iniciar sesión"}
+            </button>
+          </form>
+        ) : null}
+        {auth.kind === "authenticated" ? (
+          <div>
+            <p>Sesión autenticada.</p>
+            <p>Rol asignado por el servidor: {auth.role}.</p>
+            <button type="button" onClick={signOut}>
+              Cerrar sesión
+            </button>
+          </div>
+        ) : null}
+        {loginMessage ? <p role="status">{loginMessage}</p> : null}
+      </section>
       {connection.kind === "loading" ? <p role="status">Comprobando conexión con la API…</p> : null}
       {connection.kind === "error" ? (
         <p role="alert">No fue posible comprobar la conexión con la API.</p>
