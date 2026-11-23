@@ -24,6 +24,8 @@ jobs:
       - run: python -m ruff check .
       - run: python -m mypy app
       - run: python -m pytest
+      - run: python -m unittest discover -s tests -p 'test_*.py'
+        working-directory: .
 
   web:
     runs-on: ubuntu-latest
