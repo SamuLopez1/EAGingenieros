@@ -1,6 +1,7 @@
 import { StaffingSection } from "./StaffingSection";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import { ReportSection } from "./ReportSection";
 import { ApiError } from "./api/client";
 import { approveComparison, compare, correctComparison, outcomes, readComparison } from "./api/comparison";
 import type { Comparison, Outcome } from "./api/comparison";
@@ -74,11 +75,14 @@ export function DossierComparison({ opportunityId, role, disabled, openDocument 
   }
 
   const blocked = disabled || busy;
+  const linkedRevision = new URLSearchParams(window.location.search).get("report_revision");
   return <section className="dossier-analysis" aria-labelledby="comparison-title">
     <h4 id="comparison-title">Comparación con EAG</h4>
     <button type="button" className="btn btn-s" disabled={blocked}
       onClick={() => void run(() => compare(opportunityId))}>Comparar con EAG</button>
     {error ? <p role="alert">{error}</p> : null}
+    {linkedRevision && (!result || result.status !== "aprobado" || linkedRevision !== String(result.revision))
+      ? <p>Para abrir el informe del enlace, comprueba que su aprobación esté vigente.</p> : null}
     {result && result.revision > 0 ? <>
       <p role="status">{statusLabels[result.status]} · Revisión {result.revision} · Perfil {result.profile_version || "sin registrar"}</p>
       {result.invalidated_by.length ? <p>Cambios: {result.invalidated_by.map((key) => inputLabels[key] ?? key).join(", ")}.</p> : null}
@@ -134,6 +138,9 @@ export function DossierComparison({ opportunityId, role, disabled, openDocument 
         <StaffingSection key={`${opportunityId}/${result.revision}/${result.fingerprint}`}
           opportunityId={opportunityId} rows={result.rows} />
       ) : null}
+      {result.status === "aprobado" ? <ReportSection
+        key={`${opportunityId}/${result.revision}`} opportunityId={opportunityId}
+        revision={result.revision} canSend={role === "administrador"} /> : null}
       {result.audit.length ? <details>
         <summary>Historial de revisión</summary>
         <ol>

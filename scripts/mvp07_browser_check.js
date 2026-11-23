@@ -6,6 +6,7 @@ async (page) => {
   const folder = page.getByRole("region", { name: "Expediente", exact: true });
   const documentList = folder.getByRole("list", { name: "Documentos del expediente" });
   const withComparison = new URL(page.url()).searchParams.has("qa_comparison");
+  const withReport = new URL(page.url()).searchParams.has("qa_report");
   const withStaffing = new URL(page.url()).searchParams.has("qa_staffing");
   const withMargin = new URL(page.url()).searchParams.has("qa_margin");
   const withShortlist = new URL(page.url()).searchParams.has("qa_shortlist");
@@ -210,6 +211,31 @@ async (page) => {
     await matrix.getByRole("button", { name: "Guardar corrección" }).click();
     await matrix.getByText("Habilitante · Cumple parcialmente", { exact: true }).waitFor();
     await approve();
+    if (withReport) {
+      const report = matrix.locator("#informe-aprobado");
+      await report.getByRole("heading", { name: /Informe aprobado/ }).waitFor();
+      const pdfPreview = page.waitForResponse((res) => res.url().includes("/reports/") &&
+        res.request().method() === "GET" && res.headers()["content-type"] === "application/pdf");
+      await report.getByRole("button", { name: "Vista previa del PDF" }).click();
+      const preview = await pdfPreview;
+      assert(preview.headers()["cache-control"] === "private, no-store", "PDF sin política privada");
+      await report.locator("iframe").waitFor();
+      await report.getByRole("button", { name: "Cerrar vista previa" }).click();
+      const saved = page.waitForEvent("download");
+      await report.getByRole("button", { name: "Descargar PDF privado" }).click();
+      const file = await saved;
+      assert(file.suggestedFilename().endsWith(".pdf"), "El archivo descargado no es el informe");
+      await file.delete();
+
+      await report.getByLabel("Destinatario autorizado").selectOption("revisor@fixture.invalid");
+      await report.getByRole("button", { name: "Enviar enlace privado" }).click();
+      await report.getByRole("button", { name: "Comprobar o reintentar envío" }).click();
+      await report.getByText("Auditoría de correo", { exact: true }).click();
+      await report.getByText("2 intentos", { exact: true }).waitFor();
+      await report.getByText(/revisor@fixture.invalid · Aceptado por el proveedor/).waitFor();
+      assert(await report.getByRole("button", { name: "Comprobar o reintentar envío" }).isDisabled(),
+        "El envío aceptado continuó habilitado");
+    }
     if (withMargin) await checkMargins();
     if (withShortlist) {
       await details.getByRole("button", { name: "Guardar en lista corta", exact: true }).click();
@@ -231,6 +257,9 @@ async (page) => {
     await approve();
     await add("Adenda-B", "adenda");
     await matrix.getByRole("status").filter({ hasText: "La aprobación anterior no está vigente" }).waitFor();
+    if (withReport) {
+      assert(await matrix.locator("#informe-aprobado").count() === 0, "Informe visible tras invalidar");
+    }
     await back();
     assert(await open("003") === a, "El retorno abrió una ficha incorrecta");
     await matrix.getByRole("status").filter({ hasText: "Comparación aprobada" }).waitFor();
@@ -270,6 +299,7 @@ async (page) => {
     return "QA_BROWSER_OK oportunidades=2 comparaciones=2 descargas=4 correcciones=1 aprobaciones=2 invalidaciones=1" +
       (withStaffing ? " encaje=1 brecha=1 pendiente=1" : "") +
       (withMargin ? " escenarios=2 revisiones=1" : "") +
+      (withReport ? " informes=1 correosimulado=1 reintento=1" : "") +
       (withShortlist ? " lista=1 columnas=3 recarga=1" : "");
   }
 

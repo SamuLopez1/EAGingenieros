@@ -472,6 +472,14 @@ td.is-unknown {
   white-space: pre-wrap;
 }
 
+.report-preview {
+  display: block;
+  width: 100%;
+  min-height: 65vh;
+  margin: .65rem 0;
+  border: 1px solid var(--hairline);
+}
+
 .shortlist {
   margin: 1rem 0;
   padding: 1rem;
