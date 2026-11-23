@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     document_clamav_host: str | None = None
     document_clamav_port: int = Field(default=3310, ge=1, le=65535)
     official_document_manifest: Path | None = None
+    extraction_timeout_seconds: int = Field(default=90, ge=5, le=300)
+    extraction_ocr_max_pages: int = Field(default=12, ge=0, le=50)
+    extraction_ocr_language: str = Field(default="spa+eng", pattern=r"^[a-z]{3}([+][a-z]{3}){0,3}$")
 
     @property
     def database_is_configured(self) -> bool:

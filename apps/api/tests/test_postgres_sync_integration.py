@@ -339,3 +339,19 @@ def test_dossier_migration_blocks_sql_client_roles(postgres_engine: Engine) -> N
             WHERE relname IN ('opportunity_documents', 'opportunity_document_contents')
         """)).all()
         assert rows == [(True, False, False)] * 2
+
+def test_extraction_migration_blocks_sql_client_roles(postgres_engine: Engine) -> None:
+    config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    with postgres_engine.begin() as connection:
+        connection.execute(text("CREATE ROLE anon"))
+        connection.execute(text("CREATE ROLE authenticated"))
+        connection.execute(text("ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO anon"))
+        connection.execute(text("ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO authenticated"))
+    command.upgrade(config, "20261122000004")
+    with postgres_engine.connect() as connection:
+        row = connection.execute(text("""
+            SELECT relrowsecurity, has_table_privilege('anon', oid, 'SELECT'),
+                   has_table_privilege('authenticated', oid, 'SELECT')
+            FROM pg_class WHERE relname = 'document_extractions'
+        """)).one()
+        assert row == (True, False, False)

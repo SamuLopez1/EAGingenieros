@@ -447,3 +447,9 @@ td.is-unknown {
 .dossier-list li { padding: .65rem 0; border-bottom: 1px solid var(--hairline); overflow-wrap: anywhere; }
 .dossier-list p { margin: .3rem 0; }
 .dossier-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+
+.document-extraction { margin-top: .75rem; }
+.document-extraction summary { cursor: pointer; color: var(--ink); font-weight: 500; }
+.document-extraction details { margin-block: .75rem; }
+.extraction-fragments, .extraction-notices { padding-inline-start: 1.4rem; }
+.extraction-fragments p { white-space: pre-wrap; overflow-wrap: anywhere; }
