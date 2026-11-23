@@ -16,6 +16,7 @@ from app.api.document_routes import DocumentServices
 from app.api.document_routes import router as opportunity_documents_router
 from app.api.extraction_routes import router as extraction_router
 from app.api.filter_routes import router as opportunity_filters_router
+from app.api.requirements_routes import router as requirements_router
 from app.api.routes import require_eag_member
 from app.api.routes import router as opportunities_router
 from app.auth import (
@@ -128,6 +129,7 @@ def create_app(
     )
     app.include_router(opportunity_documents_router)
     app.include_router(extraction_router)
+    app.include_router(requirements_router)
 
     @app.exception_handler(DocumentError)
     async def document_error(_: Request, error: Exception) -> JSONResponse:

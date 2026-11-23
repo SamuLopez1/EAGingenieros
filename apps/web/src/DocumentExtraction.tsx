@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { fetchExtraction, requestExtraction } from "./api/extraction";
-import type { Extraction, Locator } from "./api/extraction";
+import { fetchExtraction, formatLocator, requestExtraction } from "./api/extraction";
+import type { Extraction } from "./api/extraction";
 
 const states: Record<Extraction["status"], string> = {
   sin_extraccion: "Sin extracción",
@@ -35,18 +35,6 @@ const messages: Record<string, string> = {
   worker_fallido: "El proceso de extracción no pudo entregar un resultado.",
   worker_interrumpido: "La tarea se interrumpió antes de obtener un resultado.",
 };
-
-function label(loc: Locator): string {
-  if (loc.page !== null) return `Página ${loc.page}`;
-  if (loc.sheet !== null) return [`Hoja ${loc.sheet}`, loc.cell].filter(Boolean).join(" · ");
-  return [
-    loc.section ? `Sección ${loc.section}` : null,
-    loc.paragraph !== null ? `Párrafo ${loc.paragraph}` : null,
-    loc.table !== null ? `Tabla ${loc.table}` : null,
-    loc.row !== null ? `fila ${loc.row}` : null,
-    loc.column !== null ? `celda ${loc.column}` : null,
-  ].filter(Boolean).join(" · ");
-}
 
 export function DocumentExtraction({
   opportunityId, documentId, version,
@@ -119,7 +107,7 @@ export function DocumentExtraction({
             <ul className="extraction-notices">
               {result.warnings.map((warning, index) => (
                 <li key={index}>
-                  {warning.locator ? `${label(warning.locator)} · ` : ""}
+                  {warning.locator ? `${formatLocator(warning.locator)} · ` : ""}
                   {messages[warning.code] ?? "Revisar manualmente la cobertura."}
                 </li>
               ))}
@@ -132,7 +120,7 @@ export function DocumentExtraction({
             <ol className="extraction-fragments">
               {result.fragments.slice(0, visible).map((fragment, index) => (
                 <li key={index}>
-                  <strong>{label(fragment.locator)}</strong>
+                  <strong>{formatLocator(fragment.locator)}</strong>
                   {fragment.method === "ocr" ? (
                     <span> · OCR{fragment.confidence !== null ? ` ${Math.round(fragment.confidence)}%` : ""}</span>
                   ) : null}
