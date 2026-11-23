@@ -5,9 +5,11 @@ from sqlalchemy import engine_from_config, pool
 
 from app.config import Settings
 from app.db import (
+    comparison_models,  # noqa: F401 - register migration metadata
     document_models,  # noqa: F401 - register migration metadata
     extraction_models,  # noqa: F401 - register migration metadata
     filter_models,  # noqa: F401 - register migration metadata
+    profile_models,  # noqa: F401 - register migration metadata
 )
 from app.db.models import Base
 

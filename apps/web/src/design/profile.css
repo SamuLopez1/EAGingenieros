@@ -1,0 +1,39 @@
+.company-profile {
+  max-width: 65rem;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+.company-profile fieldset,
+.profile-entries > li {
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid var(--hairline, #c8c8c8);
+}
+
+.profile-editor,
+.profile-editor label {
+  display: grid;
+  gap: .5rem;
+}
+
+.profile-editor {
+  max-width: 42rem;
+}
+
+.profile-editor textarea {
+  min-height: 5rem;
+}
+
+.profile-actions,
+.profile-evidence {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: .75rem;
+}
+
+.profile-entries {
+  list-style: none;
+  padding: 0;
+}

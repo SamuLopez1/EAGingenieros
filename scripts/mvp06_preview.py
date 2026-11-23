@@ -30,7 +30,10 @@ def main() -> None:
     parser.add_argument("--browser-cli", type=Path, help="Ruta a playwright-cli.js")
     parser.add_argument("--dossier", action="store_true", help="Prueba A/B/A con archivos sintéticos")
     parser.add_argument("--extraction", action="store_true", help="Incluye extracción y fallos en la prueba A/B/A")
+    parser.add_argument("--comparison", action="store_true", help="Compara dos expedientes sintéticos")
     args = parser.parse_args()
+    if args.comparison and not args.extraction:
+        parser.error("--comparison requiere --extraction")
     if args.extraction and (not args.dossier or not args.browser_cli):
         parser.error("--extraction requiere --dossier y --browser-cli")
     if args.dossier and args.public:
@@ -150,6 +153,8 @@ def main() -> None:
                 time.sleep(0.3)
         os.environ["EAG_DATABASE_URL"] = url.render_as_string(hide_password=False)
         command.upgrade(Config(str(ROOT / "apps/api/alembic.ini")), "head")
+        if args.comparison:
+            seed_comparison_profile(engine, organization)
         if args.public:
             synchronize_public(engine)
         else:
@@ -443,7 +448,8 @@ def main() -> None:
                 "mvp07_browser_check.js" if args.dossier else "mvp06_browser_check.js"
             ))
             try:
-                url = origin + ("?qa_extraction=1" if args.extraction else "")
+                query = "?qa_comparison=1" if args.comparison else "?qa_extraction=1"
+                url = origin + (query if args.extraction else "")
                 subprocess.run([*browser, "open", url, "--browser=chrome"],
                                check=True, stdout=subprocess.DEVNULL, timeout=35, cwd=browser_output)
                 checked = subprocess.run(
@@ -496,6 +502,40 @@ def main() -> None:
             assert ownership.stdout.strip() == token
             docker("rm", "--force", "--volumes", container)
             print(f"QA_REMOVED {container}", flush=True)
+
+
+
+def seed_comparison_profile(engine, organization) -> None:
+    from hashlib import sha256
+
+    from sqlalchemy.orm import Session
+
+    from app.db.models import utcnow
+    from app.db.profile_models import ProfileEvidence, ProfileVersion
+    from app.profile import Entry, EvidenceReference
+
+    now = utcnow()
+    entries = []
+    with Session(engine) as session:
+        for label, title, amount in (
+            ("A", "Experiencia vial", 12), ("B", "Experiencia hidrica", 6),
+        ):
+            payload = f"%PDF-1.4\n% EAG-QA-PERFIL-{label}\n%%EOF\n".encode()
+            doc_id = uuid4()
+            session.add(ProfileEvidence(
+                id=doc_id, organization_id=organization, author_id=UUID(int=2),
+                created_at=now, filename=f"perfil-{label}.pdf",
+                sha256=sha256(payload).hexdigest(), payload=payload,
+            ))
+            entries.append(Entry(
+                category="experiencia", title=title, status="verificado", amount=amount,
+                unit="meses", evidence=[EvidenceReference(document_id=doc_id, locator="Página 1")],
+            ).model_dump(mode="json"))
+        session.add(ProfileVersion(
+            organization_id=organization, version=1, author_id=UUID(int=2),
+            created_at=now, entries=entries,
+        ))
+        session.commit()
 
 
 def synchronize_public(engine) -> None:

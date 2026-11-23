@@ -28,7 +28,45 @@ Las dependencias requieren su resultado técnico aceptado. En MVP-02 se puede av
 
 ## Verificación
 
-Unitarias de reglas y transiciones; E2E borrador→corrección→aprobación→cambio→invalidación; evaluación de falsos cumplimientos.
+En la ficha, marca en revisión las versiones del pliego y sus adendas y extrae sus
+textos. Registra en el perfil la evidencia empresarial y su localizador. Pulsa
+**Comparar con EAG**. Cada fila conserva la cita y versión del expediente, muestra
+las evidencias empresariales y destaca los habilitantes pendientes o incumplidos.
+
+- El analista puede generar y corregir la matriz. Toda corrección requiere justificación.
+  Registrar cumplimiento total o parcial por corrección exige seleccionar evidencia
+  empresarial verificada. El administrador puede aprobar con una justificación.
+- La auditoría guarda autor y rol, fecha, revisión del análisis, versión del perfil,
+  versiones y huellas de los documentos, correcciones y resultados aprobados.
+- Si cambia el pliego, una adenda, la selección, la extracción, el perfil o las reglas,
+  el API presenta la comparación como desactualizada. Volver a una selección anterior
+  no reactiva una aprobación. Una corrección posterior vuelve a abrir el borrador.
+  Los cambios documentales solo afectan su ficha. El perfil maestro es común a las
+  comparaciones de la organización.
+- Las reglas automáticas evalúan umbrales expresados como
+  `Habilitante: Experiencia vial: mínimo 12 meses.` y vigencias como
+  `Habilitante: Certificado: vigente al 2026-12-31.`. El nombre del registro vincula
+  el requisito con el perfil. Se convierten años y meses, y se comparan monedas
+  iguales. Un faltante, una contradicción o una correspondencia ambigua exige
+  revisión humana. Los criterios de puntuación requieren interpretación humana.
+- Se puede aprobar un borrador con brechas visibles. Aprobar registra una revisión
+  humana de la matriz. Los estados de cada requisito se conservan por separado.
+
+Desde `apps/api`, ejecuta `python -m alembic upgrade head` y
+`python -m pytest tests/test_comparison.py`. La migración de #11 une las revisiones
+de #8 y #9. Para comprobarla en PostgreSQL local desechable, usa
+`EAG_TEST_POSTGRES=1 python -m pytest tests/test_postgres_sync_integration.py -k comparison`.
+
+Desde la raíz, el recorrido en Chrome usa FastAPI, Vite, PostgreSQL y el worker reales
+con identidad, escáner antivirus, documentos y perfil sintéticos.
+
+```text
+python scripts/mvp06_preview.py --dossier --extraction --comparison --browser-cli RUTA_A_PLAYWRIGHT_CLI
+```
+
+La revisión operativa de permisos y el caso empresarial autorizado quedan a cargo
+de EAG. La rama de comparación parte de una base técnica fija con #9 y #10 mientras
+se integran ambos PR.
 
 ## Fuera de alcance
 

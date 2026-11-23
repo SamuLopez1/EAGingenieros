@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import Principal
 from app.config import Settings
+from app.db.comparison_models import DossierRevision
 from app.db.document_models import OpportunityDocument, OpportunityDocumentContent
 from app.db.models import Opportunity, utcnow
 from app.documents.official import DocumentKind, OfficialReference
@@ -92,14 +93,15 @@ class IncomingDocument:
 
 
 def inspect_upload(
-    upload: IncomingDocument, settings: Settings, scanner: AntivirusScanner | None
+    data: bytes, settings: Settings, scanner: AntivirusScanner | None,
+    *, filename: str, media_type: str | None,
 ) -> ValidationResult:
-    if upload.data.startswith(b"%PDF-") and b"%%EOF" not in upload.data[-2048:]:
+    if data.startswith(b"%PDF-") and b"%%EOF" not in data[-2048:]:
         raise DocumentError(422, "archivo_corrupto")
     result = validate_upload(
-        upload.data,
-        filename=upload.filename,
-        declared_content_type=upload.media_type,
+        data,
+        filename=filename,
+        declared_content_type=media_type,
         max_bytes=settings.document_max_bytes,
         scanner=scanner,
         require_antivirus=True,
@@ -108,7 +110,7 @@ def inspect_upload(
         raise DocumentError(413, result.reason.value)
     if result.reason is not None and result.reason != QuarantineReason.ANTIVIRUS_UNAVAILABLE:
         raise DocumentError(422, result.reason.value)
-    extension = Path(upload.filename).suffix.lower()
+    extension = Path(filename).suffix.lower()
     if ALLOWED_CONTENT_TYPES.get(result.detected_type or "") != extension:
         raise DocumentError(422, "tipo_no_coincide")
     return result
@@ -138,12 +140,23 @@ class Dossier:
             OpportunityDocument.organization_id == self.organization_id,
         )
 
-    def _lock(self) -> None:
+    def lock(self) -> None:
         found = self.session.scalar(
-            select(Opportunity.id).where(Opportunity.id == self.opportunity.id).with_for_update()
+            select(Opportunity).where(Opportunity.id == self.opportunity.id).with_for_update()
+            .execution_options(populate_existing=True)
         )
         if found is None:
             raise DocumentError(404, "oportunidad_no_encontrada")
+
+    def record_change(self) -> None:
+        key = (self.organization_id, self.opportunity.id)
+        revision = self.session.get(DossierRevision, key)
+        if revision is None:
+            self.session.add(DossierRevision(
+                organization_id=key[0], opportunity_id=key[1], revision=1,
+            ))
+        else:
+            revision.revision += 1
 
     def find(self, document_id: UUID) -> OpportunityDocument:
         found = self.session.scalar(
@@ -157,11 +170,14 @@ class Dossier:
     def save(
         self, upload: IncomingDocument, scanner: AntivirusScanner | None,
     ) -> OpportunityDocument:
-        inspected = inspect_upload(upload, self.settings, scanner)
+        inspected = inspect_upload(
+            upload.data, self.settings, scanner,
+            filename=upload.filename, media_type=upload.media_type,
+        )
         status = "disponible" if inspected.accepted and inspected.scanned else "cuarentena"
         checksum = sha256(upload.data).hexdigest()
         now = utcnow()
-        self._lock()
+        self.lock()
         latest = self.session.scalar(
             select(OpportunityDocument).where(*self._scope(),
                 OpportunityDocument.document_key == upload.key)
@@ -173,6 +189,7 @@ class Dossier:
         ):
             if latest.status == "cuarentena" and status == "disponible":
                 latest.status = status
+                self.record_change()
             self.session.commit()
             return latest
         retained = self.session.scalar(
@@ -197,6 +214,7 @@ class Dossier:
             under_review=False, uploaded_at=now,
             retention_until=now + timedelta(days=self.settings.document_retention_days),
         )
+        self.record_change()
         self.session.add(doc)
         self.session.flush()
         self.session.add(OpportunityDocumentContent(document_id=doc.id, payload=upload.data))
@@ -204,9 +222,12 @@ class Dossier:
         return doc
 
     def mark_review(self, document_id: UUID) -> OpportunityDocument:
-        self._lock()
+        self.lock()
         doc = self.find(document_id)
         self.require_ready(doc)
+        if doc.under_review:
+            return doc
+        self.record_change()
         self.session.execute(
             update(OpportunityDocument)
             .where(*self._scope(), OpportunityDocument.document_key == doc.document_key)
@@ -217,7 +238,7 @@ class Dossier:
         return doc
 
     def rescan(self, document_id: UUID, scanner: AntivirusScanner | None) -> OpportunityDocument:
-        self._lock()
+        self.lock()
         doc = self.find(document_id)
         if doc.status != "cuarentena" or utc(doc.retention_until) <= utcnow():
             raise DocumentError(409, "documento_no_en_cuarentena")
@@ -230,8 +251,10 @@ class Dossier:
         )
         if result.accepted and result.scanned:
             doc.status = "disponible"
+            self.record_change()
         elif result.reason != QuarantineReason.ANTIVIRUS_UNAVAILABLE:
             doc.status = "rechazado"
+            self.record_change()
             self.session.delete(content)
         self.session.commit()
         return doc
