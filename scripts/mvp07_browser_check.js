@@ -6,10 +6,12 @@ async (page) => {
   const folder = page.getByRole("region", { name: "Expediente", exact: true });
   const documentList = folder.getByRole("list", { name: "Documentos del expediente" });
   const withComparison = new URL(page.url()).searchParams.has("qa_comparison");
+  const withStaffing = new URL(page.url()).searchParams.has("qa_staffing");
   const withExtraction = new URL(page.url()).searchParams.has("qa_extraction");
   const nativeText = "Texto sintetico verificable de la oportunidad A, version uno.";
   function textPdf(label, content = nativeText) {
-    const stream = `BT /F1 12 Tf 20 100 Td (${content}) Tj ET`;
+    const lines = content.split("\n").map((line) => `(${line}) Tj T*`).join(" ");
+    const stream = `BT /F1 12 Tf 20 220 Td 15 TL ${lines} ET`;
     const objects = [
       "<< /Type /Catalog /Pages 2 0 R >>",
       "<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
@@ -34,8 +36,16 @@ async (page) => {
     A: "Habilitante: Experiencia vial: minimo 1 ano.",
     B: "Habilitante: Experiencia hidrica: minimo 12 meses.",
   };
+  const staffingLines = {
+    A: [
+      "Objeto: Linea de servicio: Consultoria vial.",
+      "Habilitante: Cargo: Residente; dedicacion: 60%; periodo: 2026-12-01 a 2026-12-20.",
+      "Obligacion: Cargo: Residente; dedicacion: 50%; periodo: 2026-12-11 a 2026-12-30.",
+    ],
+    B: ["Obligacion: Cargo: Topografo; dedicacion: 30%; periodo: 2026-12-01 a 2026-12-15."],
+  };
   const pdf = (label) => withComparison && clauses[label]
-    ? textPdf(label, clauses[label])
+    ? textPdf(label, [clauses[label], ...(withStaffing ? staffingLines[label] : [])].join("\n"))
     : withExtraction && label === "A"
       ? textPdf(label)
       : Buffer.from(`%PDF-1.4\n% EAG-QA-${label}\n%%EOF\n`);
@@ -90,17 +100,19 @@ async (page) => {
       await documentList.getByRole("button", { name: "Marcar en revisión" }).click();
       await documentList.getByText("Disponible · En revisión").waitFor();
       const panel = await extraction("Extracción disponible", true);
-      await panel.getByText(clauses[label], { exact: true }).waitFor();
+      await panel.getByText(clauses[label], { exact: !withStaffing }).waitFor();
       await matrix.getByRole("button", { name: "Comparar con EAG" }).click();
       await matrix.getByText(expected, { exact: true }).waitFor();
-      await matrix.getByText(clauses[label], { exact: true }).waitFor();
+      const row = matrix.getByRole("list", { name: "Matriz de requisitos" }).locator(":scope > li")
+        .filter({ has: page.getByText(clauses[label], { exact: true }) });
+      await row.getByText(clauses[label], { exact: true }).waitFor();
       for (const [name, filter] of [
         ["Abrir evidencia del expediente", `/${document.id}/content`],
         ["Abrir evidencia EAG · Página 1", "/company-profile/evidence/"],
       ]) {
         const download = page.waitForEvent("download");
         const fetched = page.waitForResponse((res) => res.url().includes(filter) && res.status() === 200);
-        await matrix.getByRole("button", { name, exact: true }).click();
+        await row.getByRole("button", { name, exact: true }).click();
         await fetched;
         await (await download).delete();
       }
@@ -112,7 +124,21 @@ async (page) => {
       await matrix.getByRole("status").filter({ hasText: "Comparación aprobada" }).waitFor();
     }
     const a = await matrixFor("003", "A", "Habilitante · Cumple");
-    await matrix.getByRole("button", { name: "Corregir requisito" }).click();
+    if (withStaffing) {
+      const staff = matrix.getByRole("region", { name: "Encaje y personal" });
+      await staff.getByText("Consultoria vial · Con respaldo", { exact: true }).waitFor();
+      const overlap = staff.getByRole("listitem").filter({
+        has: page.getByText("2026-12-11 a 2026-12-20 · Capacidad insuficiente", { exact: true }),
+      });
+      await overlap.getByText("Exigencias citadas del periodo", { exact: true }).click();
+      await overlap.getByText(staffingLines.A[1], { exact: true }).waitFor();
+      await overlap.getByText(staffingLines.A[2], { exact: true }).waitFor();
+      await staff.getByText(/Evaluar contratación o reasignación de Residente al 30/).waitFor();
+      await staff.getByText("Brechas habilitantes", { exact: true }).waitFor();
+    }
+    await matrix.getByRole("list", { name: "Matriz de requisitos" }).locator(":scope > li")
+      .filter({ has: page.getByText(clauses.A, { exact: true }) })
+      .getByRole("button", { name: "Corregir requisito" }).click();
     await matrix.getByLabel("Resultado").selectOption("cumple_parcialmente");
     await matrix.getByLabel("Evidencia verificada").selectOption({ label: "Experiencia vial" });
     await matrix.getByLabel("Justificación", { exact: true }).fill("Corrección con respaldo sintético");
@@ -122,6 +148,11 @@ async (page) => {
     await back();
     const b = await matrixFor("006", "B", "Habilitante · No cumple");
     assert(a !== b, "El recorrido reabrió la ficha de A");
+    if (withStaffing) {
+      const staff = matrix.getByRole("region", { name: "Encaje y personal" });
+      await staff.getByText("2026-12-01 a 2026-12-15 · Disponibilidad por confirmar", { exact: true }).waitFor();
+      await staff.getByText("Confirmar disponibilidad con Talento Humano para este periodo.", { exact: true }).waitFor();
+    }
     await approve();
     await add("Adenda-B", "adenda");
     await matrix.getByRole("status").filter({ hasText: "La aprobación anterior no está vigente" }).waitFor();
@@ -131,7 +162,8 @@ async (page) => {
     await matrix.getByText("Habilitante · Cumple parcialmente", { exact: true }).waitFor();
     await matrix.getByText("Historial de revisión", { exact: true }).click();
     await matrix.getByText("Corrección con respaldo sintético", { exact: true }).waitFor();
-    return "QA_BROWSER_OK oportunidades=2 comparaciones=2 descargas=4 correcciones=1 aprobaciones=2 invalidaciones=1";
+    return "QA_BROWSER_OK oportunidades=2 comparaciones=2 descargas=4 correcciones=1 aprobaciones=2 invalidaciones=1" +
+      (withStaffing ? " encaje=1 brecha=1 pendiente=1" : "");
   }
 
   const opportunityA = await open("003");
