@@ -11,6 +11,7 @@ sin descargar imágenes, aplica las migraciones de MVP-05 y retira su contenedor
 
 from __future__ import annotations
 
+import json
 import os
 import secrets
 import shutil
@@ -43,7 +44,7 @@ pytestmark = pytest.mark.skipif(
     reason="opt-in: EAG_TEST_POSTGRES=1; requiere Docker e imagen PostgreSQL local",
 )
 
-REVISION = "20261122000001"
+REVISION = "20261122000002"
 IMAGE = "postgres:17.6-bookworm"
 OWNER_LABEL = "eag.mvp05-test"
 
@@ -112,6 +113,7 @@ def postgres_engine(monkeypatch: pytest.MonkeyPatch) -> Iterator[Engine]:
         command.upgrade(config, REVISION)
         assert set(inspect(engine).get_table_names()) == {
             "alembic_version", "opportunities", "sync_runs", "sync_cursors",
+            "saved_opportunity_filters",
         }
         with engine.connect() as connection:
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == REVISION
@@ -293,3 +295,29 @@ def test_daily_command_records_its_window_and_source(
         assert (run.window_start, run.window_end) == (plan.start, plan.end)
         assert session.get(SyncCursor, PROCESSES_DATASET) is None
     assert fake.calls[0]["params"]["$where"].startswith("fecha_de_ultima_publicaci >=")
+
+
+def test_catalog_migration_backfills_mvp05_rows(postgres_engine: Engine) -> None:
+    config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    command.downgrade(config, "20261122000001")
+    source = {
+        "departamento_entidad": "Antioquia",
+        "ciudad_entidad": "Medellín",
+        "fecha_de_recepcion_de": "2026-11-27T11:20:00",
+    }
+    with postgres_engine.begin() as connection:
+        connection.execute(
+            text("""
+                INSERT INTO opportunities
+                    (source_dataset, source_id, raw_payload, first_seen_at, last_synced_at)
+                VALUES ('p6dx-8zbt', 'MVP05-OLD', CAST(:payload AS jsonb), now(), now())
+            """),
+            {"payload": json.dumps(source)},
+        )
+    command.upgrade(config, REVISION)
+    with Session(postgres_engine) as session:
+        item = SqlOpportunityRepository(session).get_by_source(PROCESSES_DATASET, "MVP05-OLD")
+        assert item is not None
+        assert (item.department, item.city) == ("Antioquia", "Medellín")
+        assert item.reception_at == datetime(2026, 11, 27, 11, 20, tzinfo=UTC)
+        assert item.raw_payload == source

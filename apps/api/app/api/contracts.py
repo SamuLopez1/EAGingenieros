@@ -7,9 +7,11 @@ duplicados a mano en la interfaz.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
+
+from app.opportunity_fields import Validity, validity
 
 
 class OpportunitySummary(BaseModel):
@@ -27,6 +29,9 @@ class OpportunitySummary(BaseModel):
     reference: str | None
     title: str | None
     entity: str | None
+    department: str | None
+    city: str | None
+    phase: str | None
     status: str | None = Field(description="Estado oficial del procedimiento en SECOP II")
     modality: str | None
     published_at: datetime | None
@@ -41,6 +46,19 @@ class OpportunitySummary(BaseModel):
     )
 
 
+    @field_validator(
+        "published_at", "reception_at", "last_updated_at", "first_seen_at", "last_synced_at"
+    )
+    @classmethod
+    def ensure_utc(cls, value: datetime | None) -> datetime | None:
+        return value.replace(tzinfo=UTC) if value is not None and value.tzinfo is None else value
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def validity(self) -> Validity:
+        return validity(self.status, self.phase, self.reception_at, datetime.now(UTC))
+
+
 class OpportunityPage(BaseModel):
     """Página de resultados con los datos necesarios para paginar.
 
@@ -52,6 +70,10 @@ class OpportunityPage(BaseModel):
     total: int
     limit: int
     offset: int
+    catalog_synced_at: datetime | None = None
+    latest_sync_outcome: str | None = None
+    latest_sync_finished_at: datetime | None = None
+    catalog_stale_after_hours: int = 24
 
     @property
     def has_more(self) -> bool:

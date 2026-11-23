@@ -12,6 +12,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.api.filter_routes import router as opportunity_filters_router
+from app.api.routes import require_eag_member
 from app.api.routes import router as opportunities_router
 from app.auth import (
     AuthServices,
@@ -107,6 +109,7 @@ def create_app(
         app.state.sync_service_factory = lambda: create_sync_service(active_settings, factory)
     app.state.opportunity_settings = active_settings
     app.include_router(opportunities_router)
+    app.include_router(opportunity_filters_router, dependencies=[Depends(require_eag_member)])
 
     @app.exception_handler(SQLAlchemyError)
     async def persistence_unavailable(_: Request, error: Exception) -> JSONResponse:

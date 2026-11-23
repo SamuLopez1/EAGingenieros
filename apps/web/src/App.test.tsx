@@ -5,6 +5,8 @@ import { App } from "./App";
 import { SessionCheckError } from "./auth";
 import type { AuthClient, SessionState } from "./auth";
 
+vi.mock("./OpportunitiesPage", () => ({ default: () => <div>Catálogo conectado</div> }));
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
