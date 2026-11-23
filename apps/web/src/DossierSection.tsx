@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import { DossierAnalysis } from "./DossierAnalysis";
 import { DocumentExtraction } from "./DocumentExtraction";
 import { ApiError } from "./api/client";
 import {
@@ -123,11 +124,13 @@ export function DossierSection({
       ) : null}
       {load.kind === "ready" ? (
         <>
+          <DossierAnalysis key={`${opportunityId}/${revision}`} opportunityId={opportunityId}
+            documents={load.data.documents} disabled={busy} />
           {load.data.missing_pliego ? <p>Falta un pliego disponible. El expediente puede estar incompleto.</p> : null}
           {load.data.official.length ? (
             <ul className="dossier-list" aria-label="Documentos oficiales validados">
               {load.data.official.map((item) => (
-                <li key={item.id}>
+                <li key={item.id} id={`documento-${item.id}`}>
                   <span>{kinds[item.kind]} · {item.title}</span>
                   <button className="btn btn-s" type="button" disabled={busy} onClick={() =>
                     void mutate(() => importOfficial(opportunityId, item.id), "Documento oficial incorporado.")
@@ -156,7 +159,7 @@ export function DossierSection({
           {load.data.documents.length ? (
             <ul className="dossier-list" aria-label="Documentos del expediente">
               {load.data.documents.map((item) => (
-                <li key={item.id}>
+                <li key={item.id} id={`documento-${item.id}`}>
                   <div>
                     <strong>{kinds[item.kind]} · {item.title}</strong>
                     <p>{item.filename} · {item.origin === "oficial" ? "SECOP II" : "Carga manual"} · Versión {item.version}</p>

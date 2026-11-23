@@ -44,3 +44,15 @@ export function requestExtraction(opportunityId: number, documentId: string, ret
     `${path(opportunityId, documentId)}${retry ? "?retry=true" : ""}`, { method: "POST" },
   );
 }
+
+export function formatLocator(loc: Locator): string {
+  if (loc.page !== null) return `Página ${loc.page}`;
+  if (loc.sheet !== null) return [`Hoja ${loc.sheet}`, loc.cell].filter(Boolean).join(" · ");
+  return [
+    loc.section ? `Sección ${loc.section}` : null,
+    loc.paragraph !== null ? `Párrafo ${loc.paragraph}` : null,
+    loc.table !== null ? `Tabla ${loc.table}` : null,
+    loc.row !== null ? `fila ${loc.row}` : null,
+    loc.column !== null ? `celda ${loc.column}` : null,
+  ].filter(Boolean).join(" · ");
+}

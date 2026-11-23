@@ -27,7 +27,47 @@ Las dependencias requieren su resultado técnico aceptado. En MVP-02 se puede av
 
 ## Verificación
 
-Tests del adaptador y schema sin red; evaluación con requisitos anotados, y muestra real solo con acceso/autorización explícita.
+Marca una versión del pliego y de cada adenda «En revisión» en el expediente y completa
+su extracción. Pulsa «Generar resumen y requisitos». El API publica
+`POST /api/v1/opportunities/{opportunity_id}/requirements`, con respuesta privada.
+Cada hallazgo incluye la cita literal, el documento, la versión, el SHA-256 y el
+localizador. El adaptador offline reconoce rótulos explícitos de objeto, entregables,
+plazos, alertas, habilitantes, criterios evaluables y obligaciones de ejecución. Los
+campos sin evidencia quedan pendientes. Los avisos de adendas conservan ambas citas
+cuando se detecta un cambio en la misma materia. Revisa la precedencia manualmente.
+
+El análisis limita el lote a 80 fragmentos y 12.000 bytes UTF-8 y la respuesta a 80
+hallazgos. La caché de proceso conserva hasta 16 resultados por huella de oportunidad,
+organización, versión y contenido de origen, con vigencia de hasta cinco minutos y
+acotada por la retención del documento. El contrato y el adaptador exponen su versión.
+
+### Verificación offline
+
+Desde `apps/api`, ejecuta `python -m pytest tests/test_requirements.py`. El caso
+anotado sintético cubre objeto, plazo, entregable y los tres tipos de requisitos,
+con una adenda que cambia el cierre. Otros casos prueban aislamiento, evidencias
+inventadas, instrucciones documentales, truncamiento y errores con transporte simulado.
+
+### Proveedor real, optativo
+
+El smoke independiente envía una única fixture sintética incorporada. Requiere
+autorización explícita, una credencial en `OPENAI_API_KEY`, un modelo compatible con
+Responses y Structured Outputs, las tarifas vigentes de ese modelo y un presupuesto.
+
+```text
+python -m app.documents.requirements_smoke --authorized-synthetic --model MODELO --input-usd-per-million TARIFA_ENTRADA --output-usd-per-million TARIFA_SALIDA --max-usd PRESUPUESTO
+```
+
+El adaptador usa un límite previo estimado, 1.200 tokens de salida, una petición por
+ejecución, sin herramientas ni reintentos. Imprime únicamente el uso reportado,
+el coste calculado a partir de las tarifas indicadas y el resultado de la fixture.
+`store=false` controla el almacenamiento de la respuesta. El producto usa el
+adaptador offline y el smoke no acepta archivos privados.
+
+La ejecución real queda pendiente de una credencial y un presupuesto expresamente
+autorizados. Referencias verificadas en la documentación oficial de
+[Responses](https://developers.openai.com/api/reference/resources/responses/methods/create)
+y [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs).
 
 ## Fuera de alcance
 

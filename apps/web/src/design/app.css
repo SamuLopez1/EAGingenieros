@@ -453,3 +453,21 @@ td.is-unknown {
 .document-extraction details { margin-block: .75rem; }
 .extraction-fragments, .extraction-notices { padding-inline-start: 1.4rem; }
 .extraction-fragments p { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.dossier-analysis {
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid var(--hairline);
+}
+
+.analysis-citation {
+  margin: .5rem 0 1rem;
+  padding-left: .75rem;
+  border-left: 2px solid var(--hairline);
+  overflow-wrap: anywhere;
+}
+
+.analysis-citation blockquote {
+  margin: 0 0 .25rem;
+  white-space: pre-wrap;
+}
