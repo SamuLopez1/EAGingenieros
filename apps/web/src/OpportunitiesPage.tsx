@@ -1,4 +1,6 @@
 import { DossierSection } from "./DossierSection";
+import { ShortlistPanel, ShortlistToggle } from "./ShortlistPanel";
+import { useShortlist } from "./useShortlist";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import {
@@ -60,6 +62,7 @@ function message(error: unknown): string {
   return "No fue posible completar la consulta. Comprueba la conexión y vuelve a intentarlo.";
 }
 export default function OpportunitiesPage({ role }: { role: "administrador" | "analista" }) {
+  const shortlist = useShortlist();
   const [url, setUrl] = useState(() => window.location.search);
   const [revision, setRevision] = useState(0);
   const [load, setLoad] = useState<Load>({ key: "" });
@@ -186,6 +189,12 @@ export default function OpportunitiesPage({ role }: { role: "administrador" | "a
     next.set("opportunity", String(id));
     return `?${next}`;
   }
+  function openDetail(id: number) {
+    returnFocus.current = id;
+    const next = new URLSearchParams(url);
+    next.set("opportunity", String(id));
+    navigate(next);
+  }
   async function persist(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -279,6 +288,7 @@ export default function OpportunitiesPage({ role }: { role: "administrador" | "a
             {notice}
           </p>
         ) : null}
+        <ShortlistPanel selection={shortlist} viewKey={selectedId} detailHref={detailUrl} onOpen={openDetail} />
         {selectedId ? (
           <section className="panel opportunity-detail" aria-label="Detalle de oportunidad">
             <a
@@ -360,6 +370,7 @@ export default function OpportunitiesPage({ role }: { role: "administrador" | "a
                 ) : (
                   <p>La fuente no informó un enlace oficial válido.</p>
                 )}
+                <ShortlistToggle selection={shortlist} id={item.id} />
                 <DossierSection key={item.id} opportunityId={item.id} role={role} />
               </>
             ) : null}
@@ -606,12 +617,8 @@ export default function OpportunitiesPage({ role }: { role: "administrador" | "a
                     <OpportunityTable
                       items={page.items}
                       detailHref={detailUrl}
-                      onOpen={(id) => {
-                        returnFocus.current = id;
-                        const next = new URLSearchParams(url);
-                        next.set("opportunity", String(id));
-                        navigate(next);
-                      }}
+                      action={(id) => <ShortlistToggle selection={shortlist} id={id} />}
+                      onOpen={openDetail}
                     />
                   ) : (
                     <div className="empty">

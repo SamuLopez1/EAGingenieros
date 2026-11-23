@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { Opportunity } from "../api/contracts";
 import { formatDate, formatText } from "./format";
 import { validityLabels } from "./validity";
@@ -6,10 +7,12 @@ export function OpportunityTable({
   items,
   detailHref,
   onOpen,
+  action,
 }: {
   items: Opportunity[];
   detailHref: (id: number) => string;
   onOpen: (id: number) => void;
+  action?: (id: number) => ReactNode;
 }) {
   return (
     <div className="table-wrap" role="region" aria-label="Resultados del catálogo" tabIndex={0}>
@@ -42,6 +45,7 @@ export function OpportunityTable({
                 {item.city || item.department ? (
                   <small>{[item.city, item.department].filter(Boolean).join(", ")}</small>
                 ) : null}
+                {action ? <div>{action(item.id)}</div> : null}
               </td>
               <td data-label="Referencia" className="tnum">{formatText(item.reference)}</td>
               <td data-label="Modalidad">{formatText(item.modality)}</td>

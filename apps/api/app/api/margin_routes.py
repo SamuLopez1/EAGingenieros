@@ -8,11 +8,12 @@ from fastapi import APIRouter, Depends, Path, Query, Response
 from sqlalchemy import Select, func, select
 from sqlalchemy.exc import IntegrityError
 
-from app.api.comparison_routes import latest, prepare, present
+from app.api.comparison_routes import Inputs, latest, prepare, present
 from app.api.document_routes import PRIVATE, DocumentServices, DossierDep, ServicesDep
 from app.api.routes import require_eag_administrator, require_eag_member
 from app.api.staffing_routes import view as staffing_view
 from app.auth import Role
+from app.comparison import Comparison
 from app.db.margin_models import MarginVersion
 from app.db.models import utcnow
 from app.documents.service import DocumentError, Dossier, utc
@@ -29,6 +30,7 @@ from app.margin import (
     calculate,
     published_budget,
 )
+from app.staffing import StaffingPlan
 
 router = APIRouter(
     prefix="/api/v1/opportunities/{opportunity_id}/margin",
@@ -40,13 +42,19 @@ HISTORY_SIZE = 30
 
 
 def context(scope: Dossier, tools: DocumentServices) -> tuple[Basis, datetime]:
-    op = scope.opportunity
     inputs = prepare(scope, tools)
     comparison = present(scope, inputs, latest(scope))
     staffing = staffing_view(scope, inputs, comparison)
+    return basis_for(scope, inputs, comparison, staffing), inputs.expires_at
+
+
+def basis_for(
+    scope: Dossier, inputs: Inputs, comparison: Comparison, staffing: StaffingPlan,
+) -> Basis:
+    op = scope.opportunity
     active = staffing.status == "listo"
     periods = [(role.role, span) for role in staffing.roles for span in role.periods]
-    basis = Basis(
+    return Basis(
         published_budget=published_budget(op.source_dataset, op.raw_payload.get("precio_base")),
         comparison_revision=comparison.revision if active else None,
         comparison_fingerprint=inputs.fingerprint,
@@ -71,7 +79,6 @@ def context(scope: Dossier, tools: DocumentServices) -> tuple[Basis, datetime]:
             or any(span.verify_availability for _, span in periods)
         ),
     )
-    return basis, inputs.expires_at
 
 
 def scoped(scope: Dossier) -> Select[tuple[MarginVersion]]:
