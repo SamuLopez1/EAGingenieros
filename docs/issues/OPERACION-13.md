@@ -1,7 +1,9 @@
 # Operación de expedientes EAG
 
 Procedimiento de la [issue #13](https://github.com/SamuLopez1/EAGingenieros/issues/13).
-Aplica al esquema 20261122000011, sobre #12. Ensayar con datos sintéticos y en
+Aplica al esquema 20261122000011, sobre la unión de lista corta e informes.
+La purga también retira márgenes vencidos y las correcciones de personal ligadas
+ a comparaciones purgadas. La lista corta conserva solo la selección de fichas. Ensayar con datos sintéticos y en
 un destino aislado. Registrar hora UTC, entorno, SHA, revisión de la base,
 resultado y responsable de cada paso. Guardar solo códigos, conteos y
 referencias de respaldo en la bitácora.
@@ -127,7 +129,7 @@ base de ensayo aislada, con registro externo conservado y una segunda persona
 de Operación verificando destino y alcance.
 
 ~~~bash
-python -m alembic downgrade 20261122000010
+python -m alembic downgrade 20261122000012
 python -m alembic current
 python -m alembic upgrade 20261122000011
 python -m app.operations.retention replay --ledger "$LEDGER"

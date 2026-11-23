@@ -32,7 +32,16 @@ def main() -> None:
     parser.add_argument("--extraction", action="store_true", help="Incluye extracción y fallos en la prueba A/B/A")
     parser.add_argument("--comparison", action="store_true", help="Compara dos expedientes sintéticos")
     parser.add_argument("--report", action="store_true", help="Prueba el PDF y un proveedor de correo simulado")
+    parser.add_argument("--staffing", action="store_true", help="Verifica encaje y personal sintético")
+    parser.add_argument("--margin", action="store_true", help="Verifica escenarios de margen sintéticos")
+    parser.add_argument("--shortlist", action="store_true", help="Verifica la lista corta sintética")
     args = parser.parse_args()
+    if args.shortlist and not args.margin:
+        parser.error("--shortlist requiere --margin")
+    if args.margin and not args.staffing:
+        parser.error("--margin requiere --staffing")
+    if args.staffing and not args.comparison:
+        parser.error("--staffing requiere --comparison")
     if args.report and not args.comparison:
         parser.error("--report requiere --comparison")
     if args.comparison and not args.extraction:
@@ -157,7 +166,7 @@ def main() -> None:
         os.environ["EAG_DATABASE_URL"] = url.render_as_string(hide_password=False)
         command.upgrade(Config(str(ROOT / "apps/api/alembic.ini")), "head")
         if args.comparison:
-            seed_comparison_profile(engine, organization)
+            seed_comparison_profile(engine, organization, staffing=args.staffing)
         if args.public:
             synchronize_public(engine)
         else:
@@ -198,6 +207,7 @@ def main() -> None:
                             "urlproceso": {
                                 "url": f"https://community.secop.gov.co/synthetic/SYNTH-{index:03}"
                             },
+                            **({"precio_base": "800"} if args.margin and index == 3 else {}),
                             **validity_cases.get(index, {}),
                         },
                         fetched_at=datetime(2026, 10, 1, tzinfo=UTC),
@@ -475,13 +485,19 @@ def main() -> None:
                 query = "?qa_comparison=1" if args.comparison else "?qa_extraction=1"
                 if args.report:
                     query += "&qa_report=1"
+                if args.staffing:
+                    query += "&qa_staffing=1"
+                if args.margin:
+                    query += "&qa_margin=1"
+                if args.shortlist:
+                    query += "&qa_shortlist=1"
                 url = origin + (query if args.extraction else "")
                 subprocess.run([*browser, "open", url, "--browser=chrome"],
                                check=True, stdout=subprocess.DEVNULL, timeout=35, cwd=browser_output)
                 checked = subprocess.run(
                     [*browser, "run-code", "--filename", check_script],
                     capture_output=True, text=True, encoding="utf-8", errors="replace",
-                    check=False, timeout=90, cwd=browser_output,
+                    check=False, timeout=120 if args.shortlist else 90, cwd=browser_output,
                 )
                 result = re.search(r'^"?QA_BROWSER_OK ([a-z0-9= ]+)"?$', checked.stdout, re.M)
                 if checked.returncode or not result:
@@ -531,7 +547,8 @@ def main() -> None:
 
 
 
-def seed_comparison_profile(engine, organization) -> None:
+def seed_comparison_profile(engine, organization, *, staffing: bool = False) -> None:
+    from datetime import date
     from hashlib import sha256
 
     from sqlalchemy.orm import Session
@@ -555,7 +572,15 @@ def seed_comparison_profile(engine, organization) -> None:
             ))
             entries.append(Entry(
                 category="experiencia", title=title, status="verificado", amount=amount,
+                service_line="Consultoría vial" if staffing and label == "A" else None,
                 unit="meses", evidence=[EvidenceReference(document_id=doc_id, locator="Página 1")],
+            ).model_dump(mode="json"))
+        if staffing:
+            entries.append(Entry(
+                category="disponibilidad", title="Disponibilidad sintética", role="Residente",
+                status="verificado", dedication_percent=80, starts_on=date(2026, 12, 1),
+                ends_on=date(2026, 12, 30),
+                evidence=[EvidenceReference(document_id=doc_id, locator="Página 1")],
             ).model_dump(mode="json"))
         session.add(ProfileVersion(
             organization_id=organization, version=1, author_id=UUID(int=2),

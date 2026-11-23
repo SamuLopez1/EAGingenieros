@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { DossierAnalysis } from "./DossierAnalysis";
 import { DossierComparison } from "./DossierComparison";
 import { DocumentExtraction } from "./DocumentExtraction";
+import { MarginSection } from "./MarginSection";
 import { ApiError } from "./api/client";
 import {
   downloadDocument,
@@ -132,6 +133,7 @@ export function DossierSection({
               const item = load.data.documents.find((doc) => doc.id === id);
               if (item) void download(item);
             }} />
+          <MarginSection key={`margen/${opportunityId}/${revision}`} opportunityId={opportunityId} />
           {load.data.missing_pliego ? <p>Falta un pliego disponible. El expediente puede estar incompleto.</p> : null}
           {load.data.official.length ? (
             <ul className="dossier-list" aria-label="Documentos oficiales validados">

@@ -8,6 +8,7 @@ import sys
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from uuid import UUID
 
 from alembic import command
 from alembic.config import Config
@@ -18,7 +19,9 @@ from sqlalchemy.orm import Session
 
 from app.auth import AuthServices
 from app.config import Settings
+from app.db.margin_models import MarginVersion
 from app.db.repository import SqlOpportunityRepository
+from app.db.staffing_models import StaffingCorrection
 from app.main import create_app
 from tests.test_dossier import ANALYST, Memberships, Scanner, Validator, api
 from tests.test_postgres_sync_integration import OWNER_LABEL
@@ -28,7 +31,7 @@ from tests.test_reports import ROOT, prepare_case
 from tests.test_retention import ENVIRONMENT, KEY, counts, set_boundary
 from tests.test_sync_repository import make_record
 
-BASE_REVISION = "20261122000010"
+BASE_REVISION = "20261122000012"
 RETENTION_REVISION = "20261122000011"
 
 
@@ -133,6 +136,28 @@ def test_backup_restore_replays_purges_and_rehearses_rollback(
         _, _, _, _, approval = prepare_case((client, app, settings, postgres_engine))
     boundary = datetime.now(UTC) - timedelta(seconds=2)
     set_boundary(postgres_engine, approval["revision"], boundary)
+    organization = settings.initial_organization_id
+    with Session(postgres_engine) as db, db.begin():
+        db.add(MarginVersion(
+            organization_id=organization, opportunity_id=1, scenario_id=UUID(int=91),
+            version=1, actor_id=UUID(int=1), updated_at=boundary, event="edicion",
+            inputs={}, basis={}, calculation={}, rules_version="fixture", expires_at=boundary,
+        ))
+        db.add(StaffingCorrection(
+            organization_id=organization, opportunity_id=1, fingerprint="a" * 64,
+            sequence=1, comparison_revision=approval["revision"], row_id="b" * 64,
+            actor_id=UUID(int=1), reason="Prueba sintética", created_at=boundary,
+            previous={}, corrected={},
+        ))
+
+    def derived_counts(engine):
+        with engine.connect() as connection:
+            return connection.execute(text(
+                "SELECT (SELECT count(*) FROM margin_versions), "
+                "(SELECT count(*) FROM staffing_corrections)"
+            )).one()
+
+    assert derived_counts(postgres_engine) == (1, 1)
     assert counts(postgres_engine) == (1, 1, 1, 2, 1, 1, 1, 2)
 
     dump = "/tmp/eag-mvp13-fixture.dump"
@@ -145,13 +170,16 @@ def test_backup_restore_replays_purges_and_rehearses_rollback(
         before_purge["comparaciones_vencidas"],
         before_purge["envios_vencidos"],
     ) == (1, 2, 1)
+    assert before_purge["margenes_vencidos"] == 1
     assert retention("purge", live_dsn, ledger) == {
         "comparison": 2,
         "delivery": 1,
         "document": 1,
+        "margin": 1,
     }
     cleared = (0, 0, 0, 0, 0, 1, 1, 2)
     assert counts(postgres_engine) == cleared
+    assert derived_counts(postgres_engine) == (0, 0)
     print("Purga PostgreSQL: expediente/OCR, 2 revisiones y 1 envío; maestros preservados.")
 
     recovery = f"restore_{suffix}"
@@ -172,13 +200,16 @@ def test_backup_restore_replays_purges_and_rehearses_rollback(
     restored = create_engine(restored_url, echo=False)
     try:
         assert counts(restored) == (1, 1, 1, 2, 1, 1, 1, 2)
+        assert derived_counts(restored) == (1, 1)
         shadow_dsn = restored_url.render_as_string(hide_password=False)
         assert retention("replay", shadow_dsn, ledger) == {
             "comparison": 2,
             "delivery": 1,
             "document": 1,
+            "margin": 1,
         }
         assert counts(restored) == cleared
+        assert derived_counts(restored) == (0, 0)
         print("pg_dump/pg_restore: backup anterior; reaplicación elimina contenido restaurado.")
 
         with monkeypatch.context() as target:
@@ -198,6 +229,6 @@ def test_backup_restore_replays_purges_and_rehearses_rollback(
             assert client.get(api(1), headers=ANALYST).json()["documents"] == []
             assert client.get(f"{ROOT}/{approval['revision']}", headers=ANALYST).status_code == 409
         assert counts(restored) == cleared
-        print("Rollback .000011 -> .000010 -> .000011 y reaplicación idempotente verificados.")
+        print("Rollback .000011 -> .000012 -> .000011 y reaplicación idempotente verificados.")
     finally:
         restored.dispose()

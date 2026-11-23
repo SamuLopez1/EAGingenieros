@@ -418,6 +418,63 @@ def test_comparison_migration_joins_dependency_heads_and_protects_audit(postgres
         assert rows == [(True, False, False)] * 2
 
 
+def test_staffing_migration_protects_human_corrections(postgres_engine: Engine) -> None:
+    config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    with postgres_engine.begin() as connection:
+        connection.execute(text("CREATE ROLE anon"))
+        connection.execute(text("CREATE ROLE authenticated"))
+        connection.execute(text("ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO anon"))
+        connection.execute(text("ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO authenticated"))
+    command.upgrade(config, "20261122000007")
+    with postgres_engine.connect() as connection:
+        revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
+        assert revision == "20261122000007"
+        access = connection.execute(text("""
+            SELECT relrowsecurity, has_table_privilege('anon', oid, 'SELECT'),
+                   has_table_privilege('authenticated', oid, 'SELECT')
+            FROM pg_class WHERE relname = 'staffing_corrections'
+        """)).one()
+        assert access == (True, False, False)
+
+
+def test_margin_migration_protects_financial_scenarios(postgres_engine: Engine) -> None:
+    config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    with postgres_engine.begin() as connection:
+        connection.execute(text("CREATE ROLE anon"))
+        connection.execute(text("CREATE ROLE authenticated"))
+        connection.execute(text("ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO anon"))
+        connection.execute(text("ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO authenticated"))
+    command.upgrade(config, "20261122000008")
+    with postgres_engine.connect() as connection:
+        revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
+        assert revision == "20261122000008"
+        access = connection.execute(text("""
+            SELECT relrowsecurity, has_table_privilege('anon', oid, 'SELECT'),
+                   has_table_privilege('authenticated', oid, 'SELECT')
+            FROM pg_class WHERE relname = 'margin_versions'
+        """)).one()
+        assert access == (True, False, False)
+
+
+def test_shortlist_migration_scopes_saved_selections(postgres_engine: Engine) -> None:
+    config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    with postgres_engine.begin() as connection:
+        connection.execute(text("CREATE ROLE anon"))
+        connection.execute(text("CREATE ROLE authenticated"))
+        connection.execute(text("ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO anon"))
+        connection.execute(text("ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO authenticated"))
+    command.upgrade(config, "20261122000009")
+    with postgres_engine.connect() as connection:
+        revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
+        assert revision == "20261122000009"
+        access = connection.execute(text("""
+            SELECT relrowsecurity, has_table_privilege('anon', oid, 'SELECT'),
+                   has_table_privilege('authenticated', oid, 'SELECT')
+            FROM pg_class WHERE relname = 'opportunity_shortlists'
+        """)).one()
+        assert access == (True, False, False)
+
+
 def test_report_migration_protects_delivery_audit(postgres_engine: Engine) -> None:
     config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
     with postgres_engine.begin() as connection:
@@ -425,10 +482,11 @@ def test_report_migration_protects_delivery_audit(postgres_engine: Engine) -> No
         connection.execute(text("CREATE ROLE authenticated"))
         connection.execute(text("ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO anon"))
         connection.execute(text("ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO authenticated"))
-    command.upgrade(config, "20261122000010")
+    command.upgrade(config, "20261122000009")
+    command.upgrade(config, "20261122000012")
     with postgres_engine.connect() as connection:
         revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
-        assert revision == "20261122000010"
+        assert revision == "20261122000012"
         access = connection.execute(text("""
             SELECT relrowsecurity, has_table_privilege('anon', oid, 'SELECT'),
                    has_table_privilege('authenticated', oid, 'SELECT')
