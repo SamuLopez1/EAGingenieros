@@ -10,6 +10,7 @@ from app.db import (
     extraction_models,  # noqa: F401 - register migration metadata
     filter_models,  # noqa: F401 - register migration metadata
     profile_models,  # noqa: F401 - register migration metadata
+    report_models,  # noqa: F401 - register migration metadata
 )
 from app.db.models import Base
 

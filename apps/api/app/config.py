@@ -11,6 +11,8 @@ from uuid import UUID
 from pydantic import AnyHttpUrl, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.report_mail import normalize_address
+
 
 class Settings(BaseSettings):
     """Variables de entorno permitidas para la estructura inicial."""
@@ -54,6 +56,35 @@ class Settings(BaseSettings):
     extraction_timeout_seconds: int = Field(default=90, ge=5, le=300)
     extraction_ocr_max_pages: int = Field(default=12, ge=0, le=50)
     extraction_ocr_language: str = Field(default="spa+eng", pattern=r"^[a-z]{3}([+][a-z]{3}){0,3}$")
+
+    report_resend_api_key: SecretStr | None = None
+    report_mail_sender: str | None = None
+    report_mail_recipients: list[str] = Field(default_factory=list, max_length=20)
+    report_portal_url: AnyHttpUrl | None = None
+
+    @field_validator("report_mail_sender")
+    @classmethod
+    def validate_report_sender(cls, value: str | None) -> str | None:
+        return normalize_address(value) if value else None
+
+    @field_validator("report_mail_recipients", mode="before")
+    @classmethod
+    def validate_report_recipients(cls, value: object) -> object:
+        addresses = value.split(",") if isinstance(value, str) else value
+        if isinstance(addresses, list):
+            return list(dict.fromkeys(normalize_address(str(address))
+                                      for address in addresses if str(address).strip()))
+        return addresses
+
+    @field_validator("report_portal_url")
+    @classmethod
+    def validate_report_portal(cls, value: AnyHttpUrl | None) -> AnyHttpUrl | None:
+        if value and (
+            value.scheme != "https" or value.username or value.password
+            or value.query or value.fragment
+        ):
+            raise ValueError("El portal de informes requiere HTTPS y una URL fija.")
+        return value
 
     @property
     def database_is_configured(self) -> bool:

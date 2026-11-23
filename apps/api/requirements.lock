@@ -48,3 +48,5 @@ pillow==12.3.0
 pypdf==6.19.0
 python-docx==1.2.0
 types-openpyxl==3.1.5.20260827
+charset-normalizer==3.5.1
+reportlab==5.0.1

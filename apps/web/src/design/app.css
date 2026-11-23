@@ -471,3 +471,11 @@ td.is-unknown {
   margin: 0 0 .25rem;
   white-space: pre-wrap;
 }
+
+.report-preview {
+  display: block;
+  width: 100%;
+  min-height: 65vh;
+  margin: .65rem 0;
+  border: 1px solid var(--hairline);
+}

@@ -31,7 +31,10 @@ def main() -> None:
     parser.add_argument("--dossier", action="store_true", help="Prueba A/B/A con archivos sintéticos")
     parser.add_argument("--extraction", action="store_true", help="Incluye extracción y fallos en la prueba A/B/A")
     parser.add_argument("--comparison", action="store_true", help="Compara dos expedientes sintéticos")
+    parser.add_argument("--report", action="store_true", help="Prueba el PDF y un proveedor de correo simulado")
     args = parser.parse_args()
+    if args.report and not args.comparison:
+        parser.error("--report requiere --comparison")
     if args.comparison and not args.extraction:
         parser.error("--comparison requiere --extraction")
     if args.extraction and (not args.dossier or not args.browser_cli):
@@ -334,9 +337,30 @@ def main() -> None:
             database_url=SecretStr(url.render_as_string(hide_password=False)),
             document_download_secret=SecretStr(secrets.token_hex(32)) if args.dossier else None,
             extraction_timeout_seconds=15 if args.extraction else 90,
+            **({
+                "report_resend_api_key": "fixture-only",
+                "report_mail_sender": "informes@fixture.invalid",
+                "report_mail_recipients": ["revisor@fixture.invalid"],
+                "report_portal_url": "https://portal.fixture.invalid/",
+            } if args.report else {}),
             **auth_config,
         )
         app = create_app(settings)
+        if args.report:
+            from app.api.report_routes import gateway
+            from app.report_mail import Mail, ProviderResult
+
+            attempted: set[str] = set()
+
+            class LostReplyFixture:
+                def send(self, mail: Mail, key: str) -> ProviderResult:
+                    assert mail.recipient == "revisor@fixture.invalid"
+                    if key not in attempted:
+                        attempted.add(key)
+                        return ProviderResult("reintentar")
+                    return ProviderResult("aceptado", UUID(int=887))
+
+            app.dependency_overrides[gateway] = LostReplyFixture
         if args.dossier:
             from dataclasses import replace
 
@@ -449,6 +473,8 @@ def main() -> None:
             ))
             try:
                 query = "?qa_comparison=1" if args.comparison else "?qa_extraction=1"
+                if args.report:
+                    query += "&qa_report=1"
                 url = origin + (query if args.extraction else "")
                 subprocess.run([*browser, "open", url, "--browser=chrome"],
                                check=True, stdout=subprocess.DEVNULL, timeout=35, cwd=browser_output)
