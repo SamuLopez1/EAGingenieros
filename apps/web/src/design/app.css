@@ -1,0 +1,431 @@
+/* Estilos de la aplicación. Los tokens viven en tokens.css; aquí solo se
+ * componen. El contrato completo está en docs/design/DESIGN.md. */
+
+.wrap {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 var(--s-xl);
+}
+
+.opportunity-detail {
+  padding: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.opportunity-detail dl > div {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) 2fr;
+  gap: 1rem;
+  padding: 0.5rem 0;
+}
+
+/* --- Barra superior --- */
+.top {
+  border-bottom: 1px solid var(--hairline);
+  background: var(--canvas);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.top-in {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 56px;
+  gap: var(--s-lg);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.2px;
+  color: var(--ink);
+}
+
+.brand .mark {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  background: var(--primary);
+}
+
+.top-right {
+  display: flex;
+  align-items: center;
+  gap: var(--s-md);
+}
+
+/* Declara el modo de persistencia. Una demostración en memoria no debe
+ * confundirse con un entorno real. */
+.env {
+  font-size: 11.5px;
+  font-weight: 400;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  letter-spacing: 0.2px;
+}
+
+.env-db {
+  color: var(--state-met);
+  background: var(--state-met-bg);
+  border: 1px solid var(--state-met-line);
+}
+
+.env-mem {
+  color: var(--state-partial);
+  background: var(--state-partial-bg);
+  border: 1px solid var(--state-partial-line);
+}
+
+/* --- Encabezado --- */
+.head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s-xl);
+  padding: var(--s-xxl) 0 var(--s-xl);
+}
+
+.head .lead {
+  color: var(--ink-2);
+  font-size: 15px;
+  margin: 8px 0 0;
+  max-width: 62ch;
+  line-height: 1.6;
+}
+
+.head-actions {
+  flex: none;
+}
+
+/* --- Botones --- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: var(--r-pill);
+  padding: 8px 17px;
+  font-family: var(--sans);
+  font-size: 13.5px;
+  font-weight: 400;
+  line-height: 1;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+/* Un solo botón índigo relleno por vista: el índigo es interacción y debe
+ * permanecer escaso para no competir con los colores de estado. */
+.btn-p {
+  background: var(--primary);
+  color: #fff;
+}
+
+.btn-p:hover:not(:disabled) {
+  background: var(--primary-deep);
+}
+
+.btn-p:active:not(:disabled) {
+  background: var(--primary-press);
+}
+
+.btn-s {
+  background: var(--canvas);
+  color: var(--ink);
+  border-color: var(--hairline);
+}
+
+.btn-s:hover:not(:disabled) {
+  background: var(--canvas-soft);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* --- Avisos --- */
+.banner {
+  border-radius: var(--r-md);
+  padding: 12px 15px;
+  font-size: 13.5px;
+  margin-bottom: var(--s-lg);
+  line-height: 1.5;
+}
+
+.banner-ok {
+  background: var(--state-met-bg);
+  border: 1px solid var(--state-met-line);
+  color: var(--ink);
+}
+
+.banner-warn {
+  background: var(--state-partial-bg);
+  border: 1px solid var(--state-partial-line);
+  color: var(--ink);
+}
+
+/* --- Antigüedad del catálogo --- */
+.stale {
+  font-size: 12.5px;
+  color: var(--mute);
+  margin: 0 0 var(--s-md);
+}
+
+.stale.is-stale {
+  color: var(--state-partial);
+  font-weight: 400;
+}
+
+/* --- Panel y tabla --- */
+.panel {
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-1);
+  background: var(--canvas);
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table.dense {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+table.dense thead th {
+  background: var(--table-header);
+  color: var(--mute);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  text-align: left;
+  padding: 9px var(--s-lg);
+  border-bottom: 1px solid var(--table-rule);
+  white-space: nowrap;
+}
+
+table.dense td {
+  padding: 10px var(--s-lg);
+  border-bottom: 1px solid var(--table-rule);
+  vertical-align: middle;
+}
+
+table.dense tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+table.dense tbody tr {
+  transition: background-color 0.1s ease;
+}
+
+table.dense tbody tr:hover {
+  background: var(--table-row-hover);
+}
+
+/* La selección sobrevive al hover: si solo cambiara el fondo, mover el ratón
+ * haría perder de vista la fila elegida. */
+table.dense tbody tr.is-selected {
+  background: var(--table-row-hover);
+  box-shadow: inset 2px 0 0 var(--primary);
+}
+
+table.dense tbody tr:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.cell-entity {
+  font-weight: 400;
+  color: var(--ink);
+}
+
+.cell-title {
+  color: var(--mute);
+  font-size: 12.5px;
+  margin-top: 2px;
+  max-width: 46ch;
+}
+
+/* Dato desconocido: guion atenuado, nunca celda vacía. */
+td.is-unknown {
+  color: var(--mute);
+}
+
+/* --- Estados vacíos --- */
+.empty {
+  padding: var(--s-huge) var(--s-xl);
+  text-align: center;
+}
+
+.empty-title {
+  font-size: 15px;
+  color: var(--ink);
+  margin: 0;
+}
+
+.empty-hint {
+  font-size: 13px;
+  color: var(--mute);
+  margin: 6px 0 0;
+}
+
+/* --- Paginación --- */
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-lg);
+  padding: var(--s-lg) 0 var(--s-xl);
+}
+
+.pager-info {
+  font-size: 12.5px;
+  color: var(--mute);
+}
+
+.pager-actions {
+  display: flex;
+  gap: var(--s-sm);
+}
+
+/* --- Pie --- */
+.footnote {
+  font-size: 12px;
+  color: var(--mute);
+  line-height: 1.6;
+  padding-bottom: var(--s-huge);
+  max-width: 80ch;
+}
+
+/* --- Chips de estado (compartidos con la referencia de diseño) --- */
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: var(--r-pill);
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.state-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+.state-count {
+  margin-left: 2px;
+  opacity: 0.85;
+}
+
+.state-met {
+  color: var(--state-met);
+  background: var(--state-met-bg);
+  border: 1px solid var(--state-met-line);
+}
+
+.state-partial {
+  color: var(--state-partial);
+  background: var(--state-partial-bg);
+  border: 1px solid var(--state-partial-line);
+}
+
+.state-unmet {
+  color: var(--state-unmet);
+  background: var(--state-unmet-bg);
+  border: 1px solid var(--state-unmet-line);
+}
+
+.state-review {
+  color: var(--state-review);
+  background: var(--state-review-bg);
+  border: 1px solid var(--state-review-line);
+}
+
+@media (max-width: 760px) {
+  .head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .cell-title {
+    max-width: 30ch;
+  }
+}
+
+/* MVP-06: controles de catálogo sobre los tokens de la integración existente. */
+.filters, .saved-filters { padding: var(--s-xl); margin-bottom: var(--s-lg); }
+.filter-intro { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 24px; margin-bottom: 18px; }
+.filter-intro h2 { font-size: 18px; margin: 0; }
+.filter-intro p, .saved-filters p, .catalog-freshness { font-size: 13px; color: var(--ink-2); line-height: 1.6; }
+.filter-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }
+.filter-grid .search-field { grid-column: span 2; }
+.filters label, .saved-filters label { display: grid; gap: 7px; font-size: 13px; font-weight: 500; min-width: 0; }
+.filters input, .filters select, .saved-filters input, .saved-filters select { width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px; border: 1px solid var(--hairline-input); border-radius: var(--r-sm); background: var(--canvas); color: var(--ink); font: inherit; }
+.filter-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+.btn { min-height: 44px; line-height: 1.3; }
+.saved-filters > label { max-width: 28rem; }
+.saved-editor { display: flex; align-items: end; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+.saved-editor label { flex: 1 1 220px; max-width: 28rem; }
+.saved-editor button { flex: 0 1 auto; }
+.filters :focus-visible, .saved-filters :focus-visible, .dense a:focus-visible, .opportunity-detail a:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
+.cell-title a { color: var(--ink); text-decoration-color: var(--primary-subdued); text-underline-offset: 4px; }
+.cell-title a:hover { color: var(--primary); }
+.opportunity-detail h2 { overflow-wrap: anywhere; }
+.opportunity-detail dd { margin: 0; overflow-wrap: anywhere; }
+.result-count { color: var(--ink-2); font-size: 14px; font-variant-numeric: tabular-nums; }
+@media (max-width: 760px) {
+  .filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .filters, .saved-filters { padding: 18px; }
+  .session-bar { flex-wrap: wrap; }
+  .opportunity-detail dl > div { grid-template-columns: 1fr; gap: 4px; }
+  table.dense, table.dense tbody, table.dense tr, table.dense td { display: block; }
+  table.dense thead { position: absolute; clip-path: inset(50%); width: 1px; height: 1px; overflow: hidden; }
+  table.dense tr { padding: 12px 6px; border-bottom: 1px solid var(--hairline); }
+  table.dense td { border: 0; padding: 7px 12px; }
+  table.dense td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    color: var(--mute);
+    font-size: 12px;
+    margin-bottom: 3px;
+  }
+  .cell-title { max-width: none; }
+}
+@media (max-width: 440px) {
+  .filter-grid { grid-template-columns: minmax(0, 1fr); }
+  .filter-grid .search-field { grid-column: auto; }
+  .saved-editor { align-items: stretch; }
+  .pager { align-items: start; flex-wrap: wrap; }
+  .top-in { height: auto; min-height: 64px; flex-wrap: wrap; padding-block: 12px; }
+}
+
+.catalog-validity {
+  display: inline-block;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: .2rem .55rem;
+  line-height: 1.35;
+  font-size: .8rem;
+  white-space: nowrap;
+}
+.catalog-validity--abierto { color: #215540; background: #edf6ee; }
+.catalog-validity--cerrado { color: #424b47; background: #f0f2f0; }
+.catalog-validity--vencido { color: #7b421d; background: #fff5e9; }
+.catalog-validity--desconocida { color: #4f4b40; background: #f8f4eb; }
+.detail-source-note { max-width: 65ch; }

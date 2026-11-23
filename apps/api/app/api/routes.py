@@ -20,6 +20,7 @@ from app.api.contracts import (
     SyncTriggerResponse,
 )
 from app.auth import Principal, Role, require_roles
+from app.catalog import CatalogQuery
 from app.config import Settings
 from app.db.repository import OpportunityRepository, SqlOpportunityRepository
 from app.db.sync_service import SyncRequest, SyncService
@@ -94,23 +95,26 @@ SyncServiceDep = Annotated[SyncService, Depends(get_sync_service)]
     dependencies=[Depends(require_eag_member)],
 )
 def list_opportunities(
+    request: Request,
     repository: RepositoryDep,
-    limit: Annotated[int, Query(ge=1, le=200)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    query: Annotated[CatalogQuery, Query()],
 ) -> OpportunityPage:
-    """Devuelve las oportunidades de la más reciente a la más antigua.
-
-    Las filas sin fecha de publicación se ordenan al final: mostrarlas primero
-    daría a entender que son lo más reciente.
-    """
-
-    items = repository.list_recent(limit=limit, offset=offset)
+    result = repository.search(query)
     return OpportunityPage(
-        items=[OpportunitySummary.model_validate(item) for item in items],
-        total=repository.count(),
-        limit=limit,
-        offset=offset,
+        items=[OpportunitySummary.model_validate(item) for item in result.items],
+        total=result.total,
+        limit=query.limit,
+        offset=query.offset,
+        catalog_synced_at=result.catalog_synced_at,
+        latest_sync_outcome=result.latest_sync_outcome,
+        latest_sync_finished_at=result.latest_sync_finished_at,
+        catalog_stale_after_hours=request.app.state.opportunity_settings.catalog_stale_after_hours,
     )
+
+
+@router.get("/opportunity-options", dependencies=[Depends(require_eag_member)])
+def opportunity_options(repository: RepositoryDep) -> dict[str, list[str]]:
+    return repository.options()
 
 
 @router.get(

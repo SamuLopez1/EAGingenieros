@@ -531,7 +531,7 @@ def assert_initial_and_incremental_catalog(engine: Engine) -> None:
         assert persisted_instant(stored.last_updated_at) < window.start
         closes_at = stored.reception_at
         assert stored.raw_payload["fase"] == "Presentación de oferta"
-        assert closes_at is not None and closes_at > window.end
+        assert persisted_instant(closes_at) > window.end
 
     incremental = SyncRequest(updated_window=window)
     partial_http = FakeHttp([

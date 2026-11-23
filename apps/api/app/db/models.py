@@ -36,7 +36,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from app.secop.client import RECEPTION_FIELD, parse_timestamp
+from app.opportunity_fields import optional_text
 
 
 class Base(DeclarativeBase):
@@ -72,6 +72,9 @@ class Opportunity(Base):
     reference: Mapped[str | None] = mapped_column(String(256))
     title: Mapped[str | None] = mapped_column(Text)
     entity: Mapped[str | None] = mapped_column(Text)
+    department: Mapped[str | None] = mapped_column(Text)
+    city: Mapped[str | None] = mapped_column(Text)
+    reception_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     status: Mapped[str | None] = mapped_column(String(64))
     modality: Mapped[str | None] = mapped_column(String(128))
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -91,8 +94,8 @@ class Opportunity(Base):
     )
 
     @property
-    def reception_at(self) -> datetime | None:
-        return parse_timestamp(self.raw_payload.get(RECEPTION_FIELD))
+    def phase(self) -> str | None:
+        return optional_text(self.raw_payload, "fase")
 
     def __repr__(self) -> str:  # pragma: no cover - ayuda de depuración
         return f"<Opportunity {self.source_dataset}:{self.source_id}>"

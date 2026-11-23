@@ -10,7 +10,7 @@ export default defineConfig({
       "/api": {
         target: apiTarget,
         changeOrigin: false,
-        rewrite: (path) => path.replace(/^\/api/, ""),
+        rewrite: (path) => path.startsWith("/api/v1/") ? path : path.replace(/^\/api/, ""),
       },
     },
   },

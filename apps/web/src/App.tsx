@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
 import { browserAuthClient, SessionCheckError, signInErrorMessage } from "./auth";
 import type { AuthClient, SessionState } from "./auth";
 import { fetchHealth } from "./health";
+
+const OpportunitiesPage = lazy(() => import("./OpportunitiesPage"));
 
 type ConnectionState =
   | { kind: "loading" }
@@ -27,6 +29,7 @@ export function App({
   const passwordInput = useRef<HTMLInputElement>(null);
   const [signingIn, setSigningIn] = useState(false);
   const [loginMessage, setLoginMessage] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -67,7 +70,7 @@ export function App({
       clearTimeout(timer);
       unsubscribe();
     };
-  }, [authClient]);
+  }, [authClient, retry]);
 
   async function submitLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -96,10 +99,27 @@ export function App({
     }
   }
 
+  if (auth.kind === "authenticated") {
+    return (
+      <div className="workspace-shell">
+        <nav className="session-bar" aria-label="Cuenta">
+          <span>Sesión autenticada.</span>
+          <span>Rol asignado por el servidor: {auth.role}.</span>
+          <button type="button" onClick={signOut}>Cerrar sesión</button>
+        </nav>
+        {loginMessage ? <p role="status">{loginMessage}</p> : null}
+        <Suspense fallback={<p role="status">Cargando catálogo…</p>}>
+          <OpportunitiesPage key={auth.organizationId} role={auth.role} />
+        </Suspense>
+      </div>
+    );
+  }
+
   return (
-    <main>
+    <main className="auth-screen">
       <h1>EAG Ingenieros</h1>
-      <p>Acceso para usuarios provisionados: sin registro público ni módulos de negocio.</p>
+      <p>Consulta y seguimiento de oportunidades de contratación pública.</p>
+      <p>Acceso por invitación, sin registro público.</p>
       <section aria-label="Sesión">
         <h2>Sesión</h2>
         {auth.kind === "loading" ? <p role="status">Comprobando sesión…</p> : null}
@@ -110,6 +130,7 @@ export function App({
           <div>
             <p role="alert">{auth.message}</p>
             <button type="button" onClick={signOut}>Cerrar sesión</button>
+            <button type="button" onClick={() => setRetry((value) => value + 1)}>Reintentar conexión</button>
           </div>
         ) : null}
         {auth.kind === "anonymous" ? (
@@ -135,15 +156,6 @@ export function App({
               {signingIn ? "Iniciando sesión…" : "Iniciar sesión"}
             </button>
           </form>
-        ) : null}
-        {auth.kind === "authenticated" ? (
-          <div>
-            <p>Sesión autenticada.</p>
-            <p>Rol asignado por el servidor: {auth.role}.</p>
-            <button type="button" onClick={signOut}>
-              Cerrar sesión
-            </button>
-          </div>
         ) : null}
         {loginMessage ? <p role="status">{loginMessage}</p> : null}
       </section>

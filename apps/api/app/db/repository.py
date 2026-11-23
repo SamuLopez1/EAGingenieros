@@ -19,7 +19,9 @@ from typing import Protocol
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.catalog import CatalogQuery, CatalogResult, search_memory, search_sql
 from app.db.models import Opportunity, SyncCursor, SyncRun, utcnow
+from app.opportunity_fields import source_fields
 from app.secop.client import OpportunityRecord
 
 
@@ -44,6 +46,9 @@ SYNCED_FIELDS = (
     "reference",
     "title",
     "entity",
+    "department",
+    "city",
+    "reception_at",
     "status",
     "modality",
     "published_at",
@@ -64,6 +69,7 @@ def _values_from(record: OpportunityRecord) -> dict[str, object]:
         "last_updated_at": record.last_updated_at,
         "official_url": record.official_url,
         "raw_payload": dict(record.raw),
+        **source_fields(record.raw),
     }
 
 
@@ -104,12 +110,29 @@ class OpportunityRepository(Protocol):
 
     def list_recent(self, *, limit: int, offset: int) -> Sequence[Opportunity]: ...
 
+    def search(self, query: CatalogQuery) -> CatalogResult: ...
+
+    def options(self) -> dict[str, list[str]]: ...
+
 
 class SqlOpportunityRepository:
     """Implementación sobre SQLAlchemy."""
 
     def __init__(self, session: Session) -> None:
         self._session = session
+
+    def search(self, query: CatalogQuery) -> CatalogResult:
+        return search_sql(self._session, query)
+
+    def options(self) -> dict[str, list[str]]:
+        return {
+            name: list(self._session.scalars(
+                select(column).where(column.is_not(None)).distinct().order_by(column)
+            ))
+            for name, column in (
+                ("statuses", Opportunity.status), ("modalities", Opportunity.modality)
+            )
+        }
 
     def upsert_many(self, records: Iterable[OpportunityRecord]) -> UpsertResult:
         result = UpsertResult()
@@ -198,6 +221,16 @@ class InMemoryOpportunityRepository:
     def __init__(self) -> None:
         self._items: dict[tuple[str, str], Opportunity] = {}
         self._next_id = 1
+
+    def search(self, query: CatalogQuery) -> CatalogResult:
+        return search_memory(list(self._items.values()), query)
+
+    def options(self) -> dict[str, list[str]]:
+        return {
+            key: sorted({value for item in self._items.values()
+                         if (value := getattr(item, field))})
+            for key, field in (("statuses", "status"), ("modalities", "modality"))
+        }
 
     def upsert_many(self, records: Iterable[OpportunityRecord]) -> UpsertResult:
         result = UpsertResult()

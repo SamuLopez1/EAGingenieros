@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     secop_timeout_seconds: float = Field(default=20.0, gt=0, le=120)
     secop_max_retries: int = Field(default=2, ge=0, le=5)
     secop_max_requests: int = Field(default=50, ge=1)
+    catalog_stale_after_hours: int = Field(default=24, ge=1, le=8760)
 
     @property
     def database_is_configured(self) -> bool:

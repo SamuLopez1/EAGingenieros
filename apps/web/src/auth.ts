@@ -13,6 +13,7 @@ export interface AuthClient {
   onSessionChange(listener: () => void): () => void;
   signIn(email: string, password: string): Promise<void>;
   signOut(): Promise<void>;
+  getAccessToken?(): Promise<string | null>;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -61,6 +62,11 @@ export function createBrowserAuthClient(): AuthClient {
   const supabase = createClient(supabaseUrl, supabasePublishableKey, browserAuthClientOptions);
 
   return {
+    async getAccessToken() {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) throw new Error("El proveedor de acceso no está disponible.");
+      return data.session?.access_token ?? null;
+    },
     onSessionChange(listener) {
       // El listener solo invalida la vista; las llamadas async se difieren en App.
       const { data } = supabase.auth.onAuthStateChange(() => listener());
