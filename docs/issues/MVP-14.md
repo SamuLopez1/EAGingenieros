@@ -7,6 +7,8 @@ Validar utilidad y riesgos con usuarios antes de dar por terminado el MVP.
 ## Dependencias
 
 - MVP-13
+- #23 y #24 para validar encaje, disponibilidad y margen en el piloto
+  completo. Se pueden ensayar antes los tramos disponibles.
 
 Las dependencias requieren su resultado técnico aceptado. En MVP-02 se puede avanzar con el borrador del caso y datos públicos mientras EAG valida la muestra; eso no sustituye la aceptación empresarial.
 
@@ -15,6 +17,8 @@ Las dependencias requieren su resultado técnico aceptado. En MVP-02 se puede av
 - Preparar al menos 20 oportunidades revisadas manualmente si EAG autoriza y aporta muestra; justificar limitaciones.
 - Medir tiempos del flujo manual y asistido con mismo alcance y registrar errores por campo/falsos cumplimientos.
 - Ejecutar UAT con analista/administrador, registrar incidencias, capacitación y manual breve.
+- Validar con Comercial, Talento Humano y Finanzas el encaje, la
+  disponibilidad y los supuestos de costos y margen.
 - Entregar decisión go/no-go, pendientes y plan de seguimiento validado por responsables.
 
 ## Criterios de aceptación
@@ -24,10 +28,15 @@ Las dependencias requieren su resultado técnico aceptado. En MVP-02 se puede av
 - [ ] Se acuerdan umbrales de aceptación antes de evaluar; 60% no se trata como garantía.
 - [ ] Incidencias críticas de seguridad o falsos cumplimientos no resueltos bloquean lanzamiento.
 - [ ] Se registra aceptación o rechazo por EAG; manual y checklist de puesta en marcha están listos.
+- [ ] El piloto completo documenta las validaciones y pendientes de
+  Comercial, Talento Humano y Finanzas.
 
 ## Verificación
 
-Recorrido extremo a extremo con muestra autorizada, métricas reproducibles y acta UAT. Sin usuarios/datos se entrega protocolo pero issue queda pendiente.
+El [guion del piloto](PILOTO-14.md) contiene las pruebas de aceptación y la
+[bitácora y acta](PILOTO-14-BITACORA.md) registra tiempos, correcciones y
+decisiones. Ejecutar el recorrido con muestra y participantes autorizados.
+Mientras falten, la ejecución y la aceptación de EAG quedan pendientes.
 
 ## Fuera de alcance
 
