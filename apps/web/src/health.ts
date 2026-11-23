@@ -1,5 +1,10 @@
-const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "");
-const healthUrl = `${configuredBaseUrl ?? "/api"}/health`;
+export function healthUrlFor(configuredBaseUrl: string | undefined): string {
+  const baseUrl = configuredBaseUrl?.trim().replace(/\/+$/, "");
+
+  return `${baseUrl || "/api"}/health`;
+}
+
+const healthUrl = healthUrlFor(import.meta.env.VITE_API_BASE_URL);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
