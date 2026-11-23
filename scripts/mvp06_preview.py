@@ -28,7 +28,10 @@ def main() -> None:
     parser.add_argument("--duration", type=int, default=120)
     parser.add_argument("--public", action="store_true", help="Prueba acotada con SECOP real")
     parser.add_argument("--browser-cli", type=Path, help="Ruta a playwright-cli.js")
+    parser.add_argument("--dossier", action="store_true", help="Prueba A/B/A con archivos sintéticos")
     args = parser.parse_args()
+    if args.dossier and args.public:
+        parser.error("--dossier usa únicamente datos sintéticos")
     assert 1 <= args.duration <= 3600
     ui_port, api_port = 15176, 18106
     for port in (api_port, ui_port, 18116):
@@ -141,7 +144,7 @@ def main() -> None:
                     raise RuntimeError("PostgreSQL no arrancó en 45s") from None
                 time.sleep(0.3)
         os.environ["EAG_DATABASE_URL"] = url.render_as_string(hide_password=False)
-        command.upgrade(Config(str(ROOT / "apps/api/alembic.ini")), "20261122000002")
+        command.upgrade(Config(str(ROOT / "apps/api/alembic.ini")), "head")
         if args.public:
             synchronize_public(engine)
         else:
@@ -319,9 +322,23 @@ def main() -> None:
         settings = Settings(
             _env_file=None,
             database_url=SecretStr(url.render_as_string(hide_password=False)),
+            document_download_secret=SecretStr(secrets.token_hex(32)) if args.dossier else None,
             **auth_config,
         )
         app = create_app(settings)
+        if args.dossier:
+            from dataclasses import replace
+
+            class FixtureScanner:
+                engine = "fixture"
+                available = True
+
+                def scan(self, payload: bytes) -> tuple[bool, str | None]:
+                    return payload.startswith(b"%PDF-1.4\n% EAG-QA-"), None
+
+            app.state.document_services = replace(
+                app.state.document_services, scanner=FixtureScanner()
+            )
 
         @app.middleware("http")
         async def prevent_secop(request: Request, call_next):
@@ -402,7 +419,9 @@ def main() -> None:
             browser = ["node", str(args.browser_cli.resolve()), f"-s=eag-mvp06-{token}"]
             browser_output = output / f"catalog-{token}"
             browser_output.mkdir()
-            check_script = str(ROOT / "scripts/mvp06_browser_check.js")
+            check_script = str(ROOT / "scripts" / (
+                "mvp07_browser_check.js" if args.dossier else "mvp06_browser_check.js"
+            ))
             try:
                 subprocess.run([*browser, "open", origin, "--browser=chrome"],
                                check=True, stdout=subprocess.DEVNULL, timeout=35, cwd=browser_output)

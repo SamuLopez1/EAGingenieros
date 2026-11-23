@@ -12,6 +12,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.api.document_routes import DocumentServices
+from app.api.document_routes import router as opportunity_documents_router
 from app.api.filter_routes import router as opportunity_filters_router
 from app.api.routes import require_eag_member
 from app.api.routes import router as opportunities_router
@@ -34,6 +36,9 @@ from app.contracts import (
 )
 from app.db.session import create_engine_from_url, create_session_factory
 from app.db.sync_service import create_sync_service
+from app.documents.official import SecopDocumentDownloader, load_manifest
+from app.documents.service import DocumentError
+from app.documents.validation import ClamAvScanner
 from app.invitations import (
     InvitationAuthorizationError,
     InvitationProviderUnavailable,
@@ -82,7 +87,10 @@ def create_app(
             allow_origins=active_settings.cors_origins,
             allow_credentials=False,
             allow_methods=["GET", "POST", "DELETE"],
-            allow_headers=["Accept", "Authorization", "Content-Type"],
+            allow_headers=[
+                "Accept", "Authorization", "Content-Type",
+                "X-Document-Name", "X-Document-Title", "X-Document-Ticket",
+            ],
         )
 
     # Las implementaciones reales de membresías e invitaciones requieren una
@@ -110,6 +118,23 @@ def create_app(
     app.state.opportunity_settings = active_settings
     app.include_router(opportunities_router)
     app.include_router(opportunity_filters_router, dependencies=[Depends(require_eag_member)])
+    clam_host = active_settings.document_clamav_host
+    app.state.document_services = DocumentServices(
+        scanner=ClamAvScanner(host=clam_host, port=active_settings.document_clamav_port)
+        if clam_host else None,
+        downloader=SecopDocumentDownloader(),
+        manifest=load_manifest(active_settings.official_document_manifest),
+    )
+    app.include_router(opportunity_documents_router)
+
+    @app.exception_handler(DocumentError)
+    async def document_error(_: Request, error: Exception) -> JSONResponse:
+        assert isinstance(error, DocumentError)
+        return JSONResponse(
+            status_code=error.status, content={"detail": error.code},
+            headers={"Cache-Control": "private, no-store"},
+        )
+
 
     @app.exception_handler(SQLAlchemyError)
     async def persistence_unavailable(_: Request, error: Exception) -> JSONResponse:

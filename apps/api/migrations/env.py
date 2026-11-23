@@ -4,7 +4,10 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from app.config import Settings
-from app.db import filter_models  # noqa: F401 - register migration metadata
+from app.db import (
+    document_models,  # noqa: F401 - register migration metadata
+    filter_models,  # noqa: F401 - register migration metadata
+)
 from app.db.models import Base
 
 # this is the Alembic Config object, which provides

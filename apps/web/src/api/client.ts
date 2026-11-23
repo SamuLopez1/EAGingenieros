@@ -31,7 +31,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function requestResponse(path: string, init?: RequestInit): Promise<Response> {
   const { browserAuthClient } = await import("../auth");
   const token = await browserAuthClient.getAccessToken?.();
   if (!token) throw new ApiError("La sesión ha terminado.", 401);
@@ -51,6 +51,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       response.status,
     );
   }
+  return response;
+}
+
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await requestResponse(path, init);
   return response.status === 204 ? (undefined as T) : (await response.json()) as T;
 }
 
