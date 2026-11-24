@@ -1,3 +1,4 @@
+import { companyName, simulatedMailbox } from "./brand";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { ApiError } from "./api/client";
@@ -50,7 +51,7 @@ export function ReportSection({ opportunityId, revision, canSend }: {
       else {
         const link = document.createElement("a");
         link.href = url;
-        link.download = `eag-${opportunityId}-r${revision}.pdf`;
+        link.download = `${companyName.toLowerCase()}-${opportunityId}-r${revision}.pdf`;
         link.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       }
@@ -76,6 +77,8 @@ export function ReportSection({ opportunityId, revision, canSend }: {
   const canDispatch = !last || last.state === "reintentar" || last.state === "en_curso";
   return <section id="informe-aprobado" className="dossier-analysis" aria-labelledby="report-title">
     <h4 id="report-title">Informe aprobado · revisión {revision}</h4>
+    {canSend && simulatedMailbox ? <p><a href="/api/demo-mailbox" target="_blank"
+      rel="noreferrer">Abrir buzón simulado</a></p> : null}
     <button className="btn btn-s" type="button" disabled={busy} onClick={() => void open(false)}>Vista previa del PDF</button>{" "}
     <button className="btn btn-s" type="button" disabled={busy} onClick={() => void open(true)}>Descargar PDF privado</button>
     {preview ? <div>

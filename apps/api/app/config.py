@@ -23,6 +23,7 @@ class Settings(BaseSettings):
         env_prefix="EAG_", env_file=".env", extra="ignore", enable_decoding=False
     )
 
+    company_name: str = "EAG Ingenieros"
     app_name: str = "EAG API"
     app_version: str = "0.1.0"
     environment: Literal["development", "test", "production"] = "development"

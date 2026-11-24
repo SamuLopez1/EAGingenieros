@@ -1,3 +1,4 @@
+import { productName, companyName } from "./brand";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
@@ -124,14 +125,14 @@ export function App({
 
   return (
     <main className="auth-screen">
-      <h1>EAG Ingenieros</h1>
+      <h1>{productName}</h1>
       <p>Consulta y seguimiento de oportunidades de contratación pública.</p>
       <p>Acceso por invitación, sin registro público.</p>
       <section aria-label="Sesión">
         <h2>Sesión</h2>
         {auth.kind === "loading" ? <p role="status">Comprobando sesión…</p> : null}
         {auth.kind === "configuration-required" ? (
-          <p role="alert">El inicio de sesión está pendiente de configuración por EAG.</p>
+          <p role="alert">El inicio de sesión está pendiente de configuración por {companyName}.</p>
         ) : null}
         {auth.kind === "error" ? (
           <div>

@@ -1,3 +1,4 @@
+import { companyName } from "./brand";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { ApiError } from "./api/client";
@@ -138,7 +139,7 @@ export default function CompanyProfile({ editable }: { editable: boolean }) {
   const entry = draft?.[editingIndex];
   const lastVersion = history.at(-1)?.version;
   return <main className="company-profile">
-    <h1>Perfil empresarial</h1>
+    <h1>Perfil empresarial{companyName === "EAG" ? "" : ' · ' + companyName}</h1>
     {message ? <p role="alert">{message}</p> : null}
     {!snapshot ? <button type="button" onClick={() => setRefresh((value) => value + 1)}>Cargar perfil</button> : (
       <>

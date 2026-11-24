@@ -1,3 +1,4 @@
+import { companyName } from "./brand";
 import { StaffingSection } from "./StaffingSection";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
@@ -77,9 +78,9 @@ export function DossierComparison({ opportunityId, role, disabled, openDocument 
   const blocked = disabled || busy;
   const linkedRevision = new URLSearchParams(window.location.search).get("report_revision");
   return <section className="dossier-analysis" aria-labelledby="comparison-title">
-    <h4 id="comparison-title">Comparación con EAG</h4>
+    <h4 id="comparison-title">Comparación con {companyName}</h4>
     <button type="button" className="btn btn-s" disabled={blocked}
-      onClick={() => void run(() => compare(opportunityId))}>Comparar con EAG</button>
+      onClick={() => void run(() => compare(opportunityId))}>Comparar con {companyName}</button>
     {error ? <p role="alert">{error}</p> : null}
     {linkedRevision && (!result || result.status !== "aprobado" || linkedRevision !== String(result.revision))
       ? <p>Para abrir el informe del enlace, comprueba que su aprobación esté vigente.</p> : null}
@@ -109,7 +110,7 @@ export function DossierComparison({ opportunityId, role, disabled, openDocument 
                   key={`${evidence.document_id}/${evidence.locator}`}
                   onClick={() => void downloadEvidence(evidence.document_id).catch(() =>
                     setError("No se pudo descargar la evidencia empresarial."))}>
-                  Abrir evidencia EAG · {evidence.locator}
+                  Abrir evidencia {companyName} · {evidence.locator}
                 </button>)}
               </li>)}
             </ul> : <p>Sin evidencia asociada del perfil.</p>}

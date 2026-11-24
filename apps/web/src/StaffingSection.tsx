@@ -1,3 +1,4 @@
+import { companyName } from "./brand";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { ApiError } from "./api/client";
@@ -46,7 +47,7 @@ export function StaffingSection({ opportunityId, rows }: { opportunityId: number
   }, [opportunityId, retry]);
 
   function openEvidence(documentId: string) {
-    void downloadEvidence(documentId).catch(() => setError("No se pudo abrir la evidencia de EAG."));
+    void downloadEvidence(documentId).catch(() => setError("No se pudo abrir la evidencia empresarial."));
   }
 
   async function correct(event: FormEvent<HTMLFormElement>) {
@@ -93,7 +94,7 @@ export function StaffingSection({ opportunityId, rows }: { opportunityId: number
         {line.support.map((entry, index) => <div key={index}>
           <p>{entry.title} · {entry.category}</p>
           {entry.evidence.map((ref, index) => <button key={index} type="button" className="btn btn-s"
-            onClick={() => openEvidence(ref.document_id)}>Evidencia EAG · {ref.locator}</button>)}
+            onClick={() => openEvidence(ref.document_id)}>Evidencia {companyName} · {ref.locator}</button>)}
         </div>)}
       </div>)}
       {plan.qualifying_gaps.length ? <div>

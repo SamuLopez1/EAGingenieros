@@ -1,3 +1,4 @@
+import { companyName } from "./brand";
 import { DossierSection } from "./DossierSection";
 import { ShortlistPanel, ShortlistToggle } from "./ShortlistPanel";
 import { useShortlist } from "./useShortlist";
@@ -207,7 +208,7 @@ export default function OpportunitiesPage({ role }: { role: "administrador" | "a
         criteria,
         action === "update" ? selectedFilter?.id : undefined,
       );
-      setNotice(`Filtro «${result.name}» guardado para EAG.`);
+      setNotice(`Filtro «${result.name}» guardado para ${companyName}.`);
       setSavedRevision((value) => value + 1);
       const next = new URLSearchParams(url);
       next.set("saved", String(result.id));
@@ -263,7 +264,7 @@ export default function OpportunitiesPage({ role }: { role: "administrador" | "a
         <div className="wrap top-in">
           <div className="brand">
             <span className="mark" aria-hidden="true" />
-            EAG · Licitaciones
+            {companyName} · Licitaciones
           </div>
           <span className="env env-db">Catálogo SECOP II</span>
         </div>
@@ -511,9 +512,9 @@ export default function OpportunitiesPage({ role }: { role: "administrador" | "a
                 </p>
               ) : null}
             </section>
-            <section className="panel saved-filters" aria-label="Filtros compartidos de EAG">
+            <section className="panel saved-filters" aria-label={`Filtros compartidos de ${companyName}`}>
               <label>
-                Filtros compartidos de EAG
+                Filtros compartidos de {companyName}
                 <select
                   value={params.get("saved") ?? ""}
                   onChange={(event) => {
@@ -669,7 +670,7 @@ export default function OpportunitiesPage({ role }: { role: "administrador" | "a
         )}
         <p className="footnote">
           Fuente: SECOP II. Los campos ausentes se muestran como desconocidos. Este catálogo no
-          confirma vigencia, relevancia ni aptitud de EAG para participar.
+          confirma vigencia, relevancia ni aptitud de {companyName} para participar.
         </p>
       </main>
     </>
