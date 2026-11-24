@@ -65,13 +65,14 @@ export function updateDocument(id: number, doc: string, action: "review" | "resc
   });
 }
 
-export async function downloadDocument(id: number, doc: DossierDocument) {
+export async function downloadDocument(id: number, doc: DossierDocument, signal?: AbortSignal) {
   const resource = `${base(id)}/${encodeURIComponent(doc.id)}`;
-  const grant = await request<{ url: string }>(`${resource}/download-link`, { method: "POST" });
+  const grant = await request<{ url: string }>(`${resource}/download-link`, { method: "POST", signal });
   const [path, ticket] = grant.url.split("#");
   if (path !== `${resource}/content` || !ticket) throw new Error("Enlace de descarga inválido.");
   const response = await requestResponse(path, {
     headers: { "X-Document-Ticket": ticket },
+    signal,
   });
   return response.blob();
 }

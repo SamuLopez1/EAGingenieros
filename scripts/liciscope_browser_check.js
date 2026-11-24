@@ -16,6 +16,16 @@ async (page) => {
   await page.getByText('CO1.REQ.11405993', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Generar resumen y requisitos' }).click();
   await page.getByText(/Formato 3.*Experiencia/).first().waitFor();
+  const source = page.getByRole('region', { name: 'Resumen y requisitos' })
+    .locator('figure').filter({ hasText: 'Formato 3 - Experiencia' }).first();
+  await source.getByRole('button', { name: 'Ver documento' }).click();
+  const preview = page.getByTitle('Vista previa privada del documento');
+  await preview.waitFor();
+  if (!(await preview.getAttribute('src'))?.endsWith('#page=19')) {
+    throw new Error('El visor no abrió la página de la cita');
+  }
+  await page.getByRole('button', { name: 'Cerrar vista del documento' }).click();
+
   await page.getByRole('button', { name: 'Comparar con Liciscope' }).click();
   await page.getByRole('list', { name: 'Matriz de requisitos' }).getByText(/revisión manual/i).first().waitFor();
   await page.getByLabel('Justificación de aprobación').fill('Ejercicio académico. La evidencia sintética no acredita cumplimiento.');
@@ -40,5 +50,5 @@ async (page) => {
   await page.goto(href);
   await page.getByRole('button', { name: 'Iniciar sesión' }).waitFor();
   await mailbox.close();
-  return 'LICISCOPE_UI_OK perfil=1 catalogo=1 ficha=1 cita=1 matriz=1 pdf=1 correo_simulado=1 login_del_enlace=1';
+  return 'LICISCOPE_UI_OK perfil=1 catalogo=1 ficha=1 cita=1 visor_pagina=19 matriz=1 pdf=1 correo_simulado=1 login_del_enlace=1';
 }

@@ -30,17 +30,21 @@ const kinds: Record<Finding["kind"], string> = {
   habilitante: "Habilitante", evaluable: "Evaluable", obligacion: "Obligación de ejecución",
 };
 
-function SourceCitation({ citation }: { citation: Citation }) {
+function SourceCitation({ citation, viewDocument, disabled }: {
+  citation: Citation; viewDocument: (id: string, page: number | null) => void; disabled: boolean;
+}) {
   return <figure className="analysis-citation">
     <blockquote>{citation.quote}</blockquote>
     <figcaption>{citation.title} · versión {citation.version} · {formatLocator(citation.locator)}{" "}
-      <a href={`#documento-${citation.document_id}`}>Ver documento</a>
+      <button className="btn btn-s" type="button" disabled={disabled}
+        onClick={() => viewDocument(citation.document_id, citation.locator.page)}>Ver documento</button>
     </figcaption>
   </figure>;
 }
 
-export function DossierAnalysis({ opportunityId, documents, disabled }: {
+export function DossierAnalysis({ opportunityId, documents, disabled, viewDocument }: {
   opportunityId: number; documents: DossierDocument[]; disabled: boolean;
+  viewDocument: (id: string, page: number | null) => void;
 }) {
   const [result, setResult] = useState<Analysis>();
   const [running, setRunning] = useState(false);
@@ -71,16 +75,16 @@ export function DossierAnalysis({ opportunityId, documents, disabled }: {
             const doc = documents.find((item) => item.id === id);
             return doc ? <span key={id}> · {doc.title} (versión {doc.version})</span> : null;
           })}
-          {warning.citations.map((citation, index) => <SourceCitation key={index} citation={citation} />)}
+          {warning.citations.map((citation, index) => <SourceCitation key={index} citation={citation} viewDocument={viewDocument} disabled={disabled} />)}
         </li>)}
       </ul> : null}
       <h5>Resumen</h5>
       {result.summary.map((item, index) => <div key={index}>
-        <strong>{kinds[item.kind]}</strong><SourceCitation citation={item.citation} />
+        <strong>{kinds[item.kind]}</strong><SourceCitation citation={item.citation} viewDocument={viewDocument} disabled={disabled} />
       </div>)}
       <h5>Requisitos tipados</h5>
       {result.requirements.map((item, index) => <div key={index}>
-        <strong>{kinds[item.kind]}</strong><SourceCitation citation={item.citation} />
+        <strong>{kinds[item.kind]}</strong><SourceCitation citation={item.citation} viewDocument={viewDocument} disabled={disabled} />
       </div>)}
     </> : null}
   </section>;

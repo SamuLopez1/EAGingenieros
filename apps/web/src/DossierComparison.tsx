@@ -21,9 +21,10 @@ const inputLabels: Record<string, string> = {
 };
 const typeLabels = { habilitante: "Habilitante", evaluable: "Evaluable", obligacion: "Obligación de ejecución" };
 
-export function DossierComparison({ opportunityId, role, disabled, openDocument }: {
+export function DossierComparison({ opportunityId, role, disabled, openDocument, viewDocument }: {
   opportunityId: number; role: "administrador" | "analista"; disabled: boolean;
   openDocument: (id: string) => void;
+  viewDocument: (id: string, page: number | null) => void;
 }) {
   const [result, setResult] = useState<Comparison>();
   const [editing, setEditing] = useState<string>();
@@ -137,7 +138,7 @@ export function DossierComparison({ opportunityId, role, disabled, openDocument 
         </form> : null}
       {result.status === "borrador" || result.status === "aprobado" ? (
         <StaffingSection key={`${opportunityId}/${result.revision}/${result.fingerprint}`}
-          opportunityId={opportunityId} rows={result.rows} />
+          opportunityId={opportunityId} rows={result.rows} viewDocument={viewDocument} disabled={disabled} />
       ) : null}
       {result.status === "aprobado" ? <ReportSection
         key={`${opportunityId}/${result.revision}`} opportunityId={opportunityId}

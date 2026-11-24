@@ -75,7 +75,7 @@ el PDF de la nueva revisión.
 | --- | --- |
 | 0:00–0:20 | Mostrar el login de Liciscope. Iniciar sesión con los campos ya preparados fuera de cámara. Explicar que el catálogo viene de SECOP II. |
 | 0:20–0:45 | Mostrar el total del catálogo y **Sincronizar ahora**. A continuación filtrar por CM-06-IN-006-2026, abrir su ficha y mostrar el ID y el pliego oficial disponible en **Expediente**. |
-| 0:45–1:15 | Mostrar la extracción y pulsar **Generar resumen y requisitos**. Señalar el objeto en página 1 y el requisito del Formato 3 de experiencia en página 19. El localizador corresponde a la página del PDF. |
+| 0:45–1:15 | Mostrar la extracción y pulsar **Generar resumen y requisitos**. Señalar el objeto en página 1 y el requisito del Formato 3 de experiencia en página 19. Pulsa **Ver documento** en la cita de la página 19. El visor abre el PDF privado en esa página y permite abrirlo en otra pestaña. |
 | 1:15–1:50 | Pulsar **Comparar con Liciscope**. Mostrar «Revisión manual» para el requisito del Formato 3. Explicar que el soporte de la empresa está rotulado como sintético y queda pendiente de verificación. |
 | 1:50–2:10 | Completar la justificación de aprobación académica y pulsar **Aprobar comparación**. Abrir vista previa o descargar el PDF privado. Mostrar Liciscope, la revisión y una cita. La aprobación del informe conserva el resultado de revisión manual. |
 | 2:10–2:35 | Elegir el destinatario de prueba y pulsar **Enviar enlace privado**. Pulsar **Comprobar o reintentar envío** si aparece. Abrir **Buzón simulado**. Mostrar el único mensaje y que el enlace conduce al portal, que exige login en una ventana privada nueva. |
