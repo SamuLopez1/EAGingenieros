@@ -94,16 +94,16 @@ def source(cite: Citation) -> str:
     return f"{cite.title} | v{cite.version} | {location}\n{quote}"
 
 
-def footer(canvas: Canvas, _document: Any) -> None:
+def footer(canvas: Canvas, _document: Any, *, company: str) -> None:
     canvas.saveState()
     canvas.setFillColor(INK)
     canvas.setFont("Helvetica", 8)
-    canvas.drawString(40, 26, "EAG Ingenieros  |  Informe privado")
+    canvas.drawString(40, 26, f"{company}  |  Informe privado")
     canvas.drawRightString(A4[0] - 40, 26, f"Página {canvas.getPageNumber()}")
     canvas.restoreState()
 
 
-def render(report: ApprovedReport) -> bytes:
+def render(report: ApprovedReport, *, company: str = "EAG Ingenieros") -> bytes:
     output = BytesIO()
     doc = SimpleDocTemplate(
         output,
@@ -112,8 +112,8 @@ def render(report: ApprovedReport) -> bytes:
         rightMargin=40,
         topMargin=44,
         bottomMargin=46,
-        title="EAG | Informe aprobado",
-        author="EAG Ingenieros",
+        title=f"{company} | Informe aprobado",
+        author=company,
     )
     body = ParagraphStyle("Body", fontName="Helvetica", fontSize=9, leading=13, textColor=INK)
     tiny = ParagraphStyle("TableBody", parent=body, fontSize=8, leading=11, splitLongWords=True)
@@ -135,7 +135,7 @@ def render(report: ApprovedReport) -> bytes:
     approval = report.approval
     when = approval.created_at.astimezone(ZoneInfo("America/Bogota"))
     story: list[Any] = [
-        paragraph("EAG INGENIEROS"),
+        paragraph(company.upper()),
         Spacer(1, 7),
         paragraph("Informe de comparación aprobado", h1),
         Spacer(1, 8),
@@ -168,7 +168,7 @@ def render(report: ApprovedReport) -> bytes:
     cells = [
         [
             paragraph(title, tiny)
-            for title in ("Resultado", "Cita del expediente", "Respaldo de EAG")
+            for title in ("Resultado", "Cita del expediente", f"Respaldo de {company}")
         ]
     ]
     for index, row in enumerate(report.rows, 1):
@@ -217,5 +217,8 @@ def render(report: ApprovedReport) -> bytes:
         story.append(
             paragraph(f"{version.id}  |  v{version.version}\nSHA-256 {version.sha256}", tiny)
         )
-    doc.build(story, onFirstPage=footer, onLaterPages=footer)
+    def company_footer(canvas: Canvas, document: Any) -> None:
+        footer(canvas, document, company=company)
+
+    doc.build(story, onFirstPage=company_footer, onLaterPages=company_footer)
     return output.getvalue()

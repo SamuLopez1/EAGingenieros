@@ -1,3 +1,4 @@
+import { companyName, simulatedMailbox } from "./brand";
 import { DossierSection } from "./DossierSection";
 import { ShortlistPanel, ShortlistToggle } from "./ShortlistPanel";
 import { useShortlist } from "./useShortlist";
@@ -100,6 +101,13 @@ export default function OpportunitiesPage({ role }: { role: "administrador" | "a
     window.addEventListener("popstate", pop);
     return () => window.removeEventListener("popstate", pop);
   }, []);
+  useEffect(() => {
+    if (!simulatedMailbox || selectedId || busy) return;
+    const refresh = window.setInterval(() => {
+      if (document.visibilityState === "visible") setRevision((value) => value + 1);
+    }, 20_000);
+    return () => window.clearInterval(refresh);
+  }, [selectedId, busy]);
   useEffect(() => {
     const controller = new AbortController();
     fetchOpportunities(JSON.parse(requestKey), controller.signal)
@@ -207,7 +215,7 @@ export default function OpportunitiesPage({ role }: { role: "administrador" | "a
         criteria,
         action === "update" ? selectedFilter?.id : undefined,
       );
-      setNotice(`Filtro «${result.name}» guardado para EAG.`);
+      setNotice(`Filtro «${result.name}» guardado para ${companyName}.`);
       setSavedRevision((value) => value + 1);
       const next = new URLSearchParams(url);
       next.set("saved", String(result.id));
@@ -238,7 +246,7 @@ export default function OpportunitiesPage({ role }: { role: "administrador" | "a
     setBusy(true);
     setNotice("Sincronizando…");
     try {
-      const result = await triggerSync({ limit: 50 });
+      const result = await triggerSync(simulatedMailbox ? {} : { limit: 50 });
       const counts = `${result.records_created} nuevas, ${result.records_updated} actualizadas, ${result.records_unchanged} sin cambios.`;
       setNotice(
         result.outcome === "completed"
@@ -263,7 +271,7 @@ export default function OpportunitiesPage({ role }: { role: "administrador" | "a
         <div className="wrap top-in">
           <div className="brand">
             <span className="mark" aria-hidden="true" />
-            EAG · Licitaciones
+            {companyName} · Licitaciones
           </div>
           <span className="env env-db">Catálogo SECOP II</span>
         </div>
@@ -276,6 +284,11 @@ export default function OpportunitiesPage({ role }: { role: "administrador" | "a
               Consulta los procesos incorporados desde SECOP II. La decisión de participar requiere
               revisión humana.
             </p>
+            {simulatedMailbox ? <p>
+              Este catálogo incorpora procesos publicados con recepción futura.
+              {" "}<a href="https://www.datos.gov.co/d/p6dx-8zbt" target="_blank"
+                rel="noreferrer">Consultar el histórico completo de SECOP II</a>
+            </p> : null}
           </div>
           {role === "administrador" ? (
             <button className="btn btn-s" disabled={busy} onClick={() => void sync()}>
@@ -511,9 +524,9 @@ export default function OpportunitiesPage({ role }: { role: "administrador" | "a
                 </p>
               ) : null}
             </section>
-            <section className="panel saved-filters" aria-label="Filtros compartidos de EAG">
+            <section className="panel saved-filters" aria-label={`Filtros compartidos de ${companyName}`}>
               <label>
-                Filtros compartidos de EAG
+                Filtros compartidos de {companyName}
                 <select
                   value={params.get("saved") ?? ""}
                   onChange={(event) => {
@@ -669,7 +682,7 @@ export default function OpportunitiesPage({ role }: { role: "administrador" | "a
         )}
         <p className="footnote">
           Fuente: SECOP II. Los campos ausentes se muestran como desconocidos. Este catálogo no
-          confirma vigencia, relevancia ni aptitud de EAG para participar.
+          confirma vigencia, relevancia ni aptitud de {companyName} para participar.
         </p>
       </main>
     </>

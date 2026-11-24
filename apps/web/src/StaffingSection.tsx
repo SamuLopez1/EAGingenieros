@@ -1,3 +1,4 @@
+import { companyName } from "./brand";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { ApiError } from "./api/client";
@@ -16,11 +17,14 @@ const coverage = {
   por_confirmar: "Disponibilidad por confirmar",
 };
 
-function Source({ cite }: { cite: Citation }) {
+function Source({ cite, viewDocument, disabled }: {
+  cite: Citation; viewDocument: (id: string, page: number | null) => void; disabled: boolean;
+}) {
   return <figure className="analysis-citation">
     <blockquote>{cite.quote}</blockquote>
     <figcaption>{cite.title} · versión {cite.version} · {formatLocator(cite.locator)}{" "}
-      <a href={`#documento-${cite.document_id}`}>Ver documento</a>
+      <button className="btn btn-s" type="button" disabled={disabled}
+        onClick={() => viewDocument(cite.document_id, cite.locator.page)}>Ver documento</button>
     </figcaption>
   </figure>;
 }
@@ -29,7 +33,10 @@ function demandText(item: DemandFields) {
   return `${item.role ?? "Cargo pendiente"} · ${item.dedication === null ? "dedicación pendiente" : item.dedication + " %"} · ${item.start ?? "inicio pendiente"} a ${item.end ?? "fin pendiente"}`;
 }
 
-export function StaffingSection({ opportunityId, rows }: { opportunityId: number; rows: Row[] }) {
+export function StaffingSection({ opportunityId, rows, viewDocument, disabled }: {
+  opportunityId: number; rows: Row[]; viewDocument: (id: string, page: number | null) => void;
+  disabled: boolean;
+}) {
   const [plan, setPlan] = useState<StaffingPlan>();
   const [rowId, setRowId] = useState("");
   const [busy, setBusy] = useState(false);
@@ -46,7 +53,7 @@ export function StaffingSection({ opportunityId, rows }: { opportunityId: number
   }, [opportunityId, retry]);
 
   function openEvidence(documentId: string) {
-    void downloadEvidence(documentId).catch(() => setError("No se pudo abrir la evidencia de EAG."));
+    void downloadEvidence(documentId).catch(() => setError("No se pudo abrir la evidencia empresarial."));
   }
 
   async function correct(event: FormEvent<HTMLFormElement>) {
@@ -89,18 +96,18 @@ export function StaffingSection({ opportunityId, rows }: { opportunityId: number
       {plan.service_fit.map((line, index) => <div key={line.line ?? index}>
         <strong>{line.line ?? "Línea por confirmar"} · {line.status === "respaldado" ? "Con respaldo" : "Por confirmar"}</strong>
         <p>{line.reason}</p>
-        {line.citations.map((cite, index) => <Source key={index} cite={cite} />)}
+        {line.citations.map((cite, index) => <Source key={index} cite={cite} viewDocument={viewDocument} disabled={disabled} />)}
         {line.support.map((entry, index) => <div key={index}>
           <p>{entry.title} · {entry.category}</p>
           {entry.evidence.map((ref, index) => <button key={index} type="button" className="btn btn-s"
-            onClick={() => openEvidence(ref.document_id)}>Evidencia EAG · {ref.locator}</button>)}
+            onClick={() => openEvidence(ref.document_id)}>Evidencia {companyName} · {ref.locator}</button>)}
         </div>)}
       </div>)}
       {plan.qualifying_gaps.length ? <div>
         <h5>Brechas habilitantes</h5>
         {plan.qualifying_gaps.map((gap, index) => <div key={index}>
           <p><strong>{outcomes[gap.outcome]}</strong> · {gap.reason}</p>
-          <Source cite={gap.citation} />
+          <Source cite={gap.citation} viewDocument={viewDocument} disabled={disabled} />
         </div>)}
       </div> : null}
       <h5>Disponibilidad por cargo y periodo</h5>
@@ -118,7 +125,7 @@ export function StaffingSection({ opportunityId, rows }: { opportunityId: number
             <summary>Exigencias citadas del periodo</summary>
             {period.demand_ids.map((id) => {
               const demand = demands.get(id);
-              return demand ? <Source key={id} cite={demand.citation} /> : null;
+              return demand ? <Source key={id} cite={demand.citation} viewDocument={viewDocument} disabled={disabled} /> : null;
             })}
           </details> : null}
           {period.evidence.map((ref, index) => <button key={index} type="button" className="btn btn-s"
@@ -131,7 +138,7 @@ export function StaffingSection({ opportunityId, rows }: { opportunityId: number
         {plan.demands.map((demand) => <div key={demand.row_id}>
           <p>{demandText(demand)}{demand.corrected ? " · Corregido" : ""}</p>
           {demand.missing.length ? <p>Pendiente: {demand.missing.join(", ")}.</p> : null}
-          <Source cite={demand.citation} />
+          <Source cite={demand.citation} viewDocument={viewDocument} disabled={disabled} />
         </div>)}
       </details> : null}
       {plan.can_correct && rows.length ? <form className="dossier-form" onSubmit={(event) => void correct(event)}>

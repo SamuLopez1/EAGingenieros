@@ -32,13 +32,14 @@ class Mail:
     sender: str
     recipient: str
     link: str
+    company: str = "EAG"
 
     def payload(self) -> dict[str, object]:
         return {
             "from": self.sender,
             "to": [self.recipient],
-            "subject": "EAG | Informe aprobado disponible",
-            "text": "Consulta el informe aprobado en el portal de EAG. "
+            "subject": f"{self.company} | Informe aprobado disponible",
+            "text": f"Consulta el informe aprobado en el portal de {self.company}. "
             "Inicia sesión con una cuenta autorizada.\n\n" + self.link,
         }
 

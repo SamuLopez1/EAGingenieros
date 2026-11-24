@@ -14,6 +14,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -35,7 +36,17 @@ def main() -> None:
     parser.add_argument("--staffing", action="store_true", help="Verifica encaje y personal sintético")
     parser.add_argument("--margin", action="store_true", help="Verifica escenarios de margen sintéticos")
     parser.add_argument("--shortlist", action="store_true", help="Verifica la lista corta sintética")
+    parser.add_argument("--recording", action="store_true", help="Liciscope: ensayo local con pliego público")
+    parser.add_argument("--recording-port", type=int, choices=range(15178, 15188), default=15178)
+    parser.add_argument("--recording-refresh", type=int, default=180, metavar="SECONDS")
     args = parser.parse_args()
+    if not 30 <= args.recording_refresh <= 3600:
+        parser.error("--recording-refresh debe estar entre 30 y 3600 segundos.")
+
+    if args.recording and any((args.public, args.dossier, args.extraction, args.comparison,
+                               args.report, args.staffing, args.margin, args.shortlist, args.browser_cli)):
+        parser.error("--recording tiene su propio recorrido")
+
     if args.shortlist and not args.margin:
         parser.error("--shortlist requiere --margin")
     if args.margin and not args.staffing:
@@ -51,8 +62,10 @@ def main() -> None:
     if args.dossier and args.public:
         parser.error("--dossier usa únicamente datos sintéticos")
     assert 1 <= args.duration <= 3600
-    ui_port, api_port = 15176, 18106
-    for port in (api_port, ui_port, 18116):
+    ui_port = args.recording_port if args.recording else 15176
+    api_port = ui_port + 2930
+    auth_port = api_port + 10
+    for port in (api_port, ui_port, auth_port):
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", port))
     for key in tuple(os.environ):
@@ -82,7 +95,7 @@ def main() -> None:
     from sqlalchemy.orm import Session
     from starlette.responses import JSONResponse
 
-    public_url = "http://127.0.0.1:18116"
+    public_url = f"http://127.0.0.1:{auth_port}"
     public_key = "synthetic-public-key"
     organization = UUID(int=1)
     token = uuid4().hex
@@ -91,6 +104,9 @@ def main() -> None:
     servers: list[uvicorn.Server] = []
     vite = None
     vite_config = None
+    manifest = None
+    stop_name = "liciscope.stop" if ui_port == 15178 else f"liciscope-{ui_port}.stop"
+    stop_file = ROOT / "output" / stop_name if args.recording else None
     engine = None
     extraction_stop = threading.Event()
     extraction_thread = None
@@ -167,7 +183,17 @@ def main() -> None:
         command.upgrade(Config(str(ROOT / "apps/api/alembic.ini")), "head")
         if args.comparison:
             seed_comparison_profile(engine, organization, staffing=args.staffing)
-        if args.public:
+        if args.recording:
+            import liciscope_recording as recording
+
+            recording.seed(engine, organization)
+            from app.db.session import create_session_factory
+
+            recording_sessions = create_session_factory(engine)
+            initial = recording.refresh_catalog(recording_sessions, trigger="inicial")
+            if initial.outcome != "completed" or initial.records_created == 0:
+                raise RuntimeError("No se completó el corte inicial del catálogo SECOP.")
+        elif args.public:
             synchronize_public(engine)
         else:
             with Session(engine) as session:
@@ -243,11 +269,11 @@ def main() -> None:
         private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         jwk = json.loads(RSAAlgorithm.to_jwk(private.public_key()))
         jwk.update(kid="mvp06-qa", alg="RS256", use="sig")
-        issuer = "http://127.0.0.1:18116/auth/v1"
+        issuer = f"{public_url}/auth/v1"
         provider = FastAPI()
         provider.add_middleware(
             CORSMiddleware,
-            allow_origins=["http://127.0.0.1:15176"],
+            allow_origins=[f"http://127.0.0.1:{ui_port}"],
             allow_methods=["GET", "POST"],
             allow_headers=["*"],
         )
@@ -334,7 +360,7 @@ def main() -> None:
                 }
             ]
 
-        serve(provider, 18116)
+        serve(provider, auth_port)
         auth_config = {
             "supabase_url": public_url,
             "supabase_publishable_key": SecretStr(public_key),
@@ -342,10 +368,13 @@ def main() -> None:
             "auth_issuer": issuer,
             "auth_audience": "authenticated",
         }
+        if args.recording:
+            manifest = ROOT / "output" / f"liciscope-{token}.json"
+            manifest.parent.mkdir(exist_ok=True)
         settings = Settings(
             _env_file=None,
             database_url=SecretStr(url.render_as_string(hide_password=False)),
-            document_download_secret=SecretStr(secrets.token_hex(32)) if args.dossier else None,
+            document_download_secret=SecretStr(secrets.token_hex(32)) if args.dossier or args.recording else None,
             extraction_timeout_seconds=15 if args.extraction else 90,
             **({
                 "report_resend_api_key": "fixture-only",
@@ -353,9 +382,13 @@ def main() -> None:
                 "report_mail_recipients": ["revisor@fixture.invalid"],
                 "report_portal_url": "https://portal.fixture.invalid/",
             } if args.report else {}),
+            **(recording.settings(manifest) if args.recording else {}),
             **auth_config,
         )
         app = create_app(settings)
+        if args.recording:
+            inbox = recording.attach_mailbox(app, ui_port)
+            app.state.sync_service_factory = lambda: recording.catalog_service(recording_sessions)
         if args.report:
             from app.api.report_routes import gateway
             from app.report_mail import Mail, ProviderResult
@@ -385,7 +418,7 @@ def main() -> None:
                 app.state.document_services, scanner=FixtureScanner()
             )
 
-        if args.extraction:
+        if args.extraction or args.recording:
             from app.db.session import create_session_factory
             from app.documents.extraction_worker import run_one
 
@@ -401,7 +434,10 @@ def main() -> None:
 
         @app.middleware("http")
         async def prevent_secop(request: Request, call_next):
-            if request.method == "POST" and request.url.path == "/api/v1/sync-runs":
+            if (
+                not args.recording and request.method == "POST"
+                and request.url.path == "/api/v1/sync-runs"
+            ):
                 return JSONResponse(
                     status_code=503,
                     content={
@@ -412,6 +448,8 @@ def main() -> None:
 
         serve(app, api_port)
         label = (
+            "Liciscope · Catálogo SECOP II real · Perfil sintético · Correo simulado"
+            if args.recording else
             "QA: SECOP público sincronizado · PostgreSQL local · identidad sintética"
             if args.public
             else "QA: catálogo e identidad sintéticos · PostgreSQL local"
@@ -433,6 +471,8 @@ def main() -> None:
             VITE_SUPABASE_URL=public_url,
             VITE_SUPABASE_PUBLISHABLE_KEY=public_key,
             VITE_API_PROXY_TARGET=f"http://127.0.0.1:{api_port}",
+            **({"VITE_COMPANY_NAME": "Liciscope", "VITE_SIMULATED_MAILBOX": "1"}
+               if args.recording else {}),
         )
         vite = subprocess.Popen(
             [
@@ -470,6 +510,8 @@ def main() -> None:
                 time.sleep(0.25)
             else:
                 raise RuntimeError("La UI, el proxy o la persistencia QA no arrancaron en 20s")
+        if args.recording:
+            recording.rehearse(origin, public_url, inbox)
         print(
             f"QA_READY http://127.0.0.1:{ui_port} ({label}); duración {args.duration}s",
             flush=True,
@@ -509,8 +551,17 @@ def main() -> None:
                 subprocess.run([*browser, "close"], check=False, stdout=subprocess.DEVNULL,
                                timeout=15, cwd=browser_output)
             return
+        if stop_file is not None:
+            stop_file.unlink(missing_ok=True)
         deadline = time.monotonic() + args.duration
+        next_sync = time.monotonic() + args.recording_refresh
         while time.monotonic() < deadline:
+            if args.recording and time.monotonic() >= next_sync:
+                recording.refresh_catalog(recording_sessions)
+                next_sync = time.monotonic() + args.recording_refresh
+            if stop_file is not None and stop_file.exists():
+                stop_file.unlink()
+                break
             if vite.poll() is not None:
                 raise RuntimeError("Vite terminó antes de completar QA")
             time.sleep(1)
@@ -518,6 +569,8 @@ def main() -> None:
         if vite is not None and vite.poll() is None:
             vite.terminate()
             vite.wait(timeout=10)
+        if manifest is not None:
+            manifest.unlink(missing_ok=True)
         if vite_config is not None:
             vite_config.unlink(missing_ok=True)
         for server in servers:
@@ -680,8 +733,9 @@ if __name__ == "__main__":
         pass
     except Exception as error:  # noqa: BLE001 - límite de proceso: no exponer secretos
         # No volcar configuración/URLs/credenciales ante errores de arranque.
+        frame = traceback.extract_tb(error.__traceback__)[-1]
         print(
-            f"QA_FAILED {type(error).__name__}; comprobar infraestructura/configuración",
+            f"QA_FAILED {type(error).__name__} {Path(frame.filename).name}:{frame.lineno}",
             flush=True,
         )
         sys.exit(1)

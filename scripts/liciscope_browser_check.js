@@ -1,0 +1,54 @@
+async (page) => {
+  const origin = 'http://127.0.0.1:15178';
+  await page.context().clearCookies();
+  await page.goto(origin);
+  await page.getByRole('heading', { name: 'Liciscope', exact: true }).waitFor();
+  await page.getByLabel('Correo', { exact: true }).fill('admin@fixture.invalid');
+  await page.getByLabel('Contraseña', { exact: true }).fill('Synthetic-Only-06');
+  await page.getByRole('button', { name: 'Iniciar sesión' }).click();
+  await page.getByText('Catálogo SECOP II', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Perfil empresarial', exact: true }).click();
+  await page.getByRole('heading', { name: /Perfil empresarial.*Liciscope/ }).waitFor();
+  await page.getByText('Formato 3 de experiencia · evidencia sintética', { exact: true }).first().waitFor();
+  await page.getByRole('button', { name: 'Volver a oportunidades' }).click();
+  await page.goto(origin + '/?q=CM-06-IN-006-2026');
+  await page.locator('a[href*="opportunity=1"]').first().click();
+  await page.getByText('CO1.REQ.11405993', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Generar resumen y requisitos' }).click();
+  await page.getByText(/Formato 3.*Experiencia/).first().waitFor();
+  const source = page.getByRole('region', { name: 'Resumen y requisitos' })
+    .locator('figure').filter({ hasText: 'Formato 3 - Experiencia' }).first();
+  await source.getByRole('button', { name: 'Ver documento' }).click();
+  const preview = page.getByTitle('Vista previa privada del documento');
+  await preview.waitFor();
+  if (!(await preview.getAttribute('src'))?.endsWith('#page=19')) {
+    throw new Error('El visor no abrió la página de la cita');
+  }
+  await page.getByRole('button', { name: 'Cerrar vista del documento' }).click();
+
+  await page.getByRole('button', { name: 'Comparar con Liciscope' }).click();
+  await page.getByRole('list', { name: 'Matriz de requisitos' }).getByText(/revisión manual/i).first().waitFor();
+  await page.getByLabel('Justificación de aprobación').fill('Ejercicio académico. La evidencia sintética no acredita cumplimiento.');
+  await page.getByRole('button', { name: 'Aprobar comparación' }).click();
+  await page.getByText(/Comparación aprobada/).first().waitFor();
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Descargar PDF privado' }).click();
+  const artifact = await download;
+  if (!artifact.suggestedFilename().startsWith('liciscope-1-r')) throw new Error('Nombre o ficha del PDF incorrecto');
+  await artifact.delete();
+  await page.getByLabel('Destinatario autorizado').selectOption({ index: 1 });
+  await page.getByRole('button', { name: 'Enviar enlace privado' }).click();
+  await page.getByRole('button', { name: 'Comprobar o reintentar envío' }).click();
+  const mailbox = await page.context().newPage();
+  await mailbox.goto(origin + '/api/demo-mailbox');
+  await mailbox.getByRole('heading', { name: 'Buzón simulado' }).waitFor();
+  await mailbox.getByText('1 mensaje de prueba', { exact: true }).waitFor();
+  const href = await mailbox.getByRole('link', { name: 'Abrir el informe privado' }).getAttribute('href');
+  if (!href.includes('opportunity=1&report_revision=')) throw new Error('Enlace del informe incorrecto');
+  await page.context().clearCookies();
+  await page.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
+  await page.goto(href);
+  await page.getByRole('button', { name: 'Iniciar sesión' }).waitFor();
+  await mailbox.close();
+  return 'LICISCOPE_UI_OK perfil=1 catalogo=1 ficha=1 cita=1 visor_pagina=19 matriz=1 pdf=1 correo_simulado=1 login_del_enlace=1';
+}

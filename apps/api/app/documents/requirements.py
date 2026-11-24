@@ -1,5 +1,6 @@
 """Análisis extractivo con evidencia validada fuera del adaptador."""
 
+import re
 from dataclasses import dataclass
 from hashlib import sha256
 from typing import Literal, Protocol
@@ -11,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from app.documents.extraction import Locator
 
 SCHEMA_VERSION = "1"
-MAX_SOURCE_BYTES = 12_000
+MAX_SOURCE_BYTES = 100_000
 MAX_SOURCES = 80
 
 Kind = Literal["objeto", "entregable", "plazo", "alerta", "habilitante", "evaluable", "obligacion"]
@@ -124,13 +125,26 @@ class Adapter(Protocol):
 
 @dataclass(frozen=True)
 class OfflineAdapter:
-    version: str = "offline-reglas-v1"
+    version: str = "offline-reglas-v2"
 
     def propose(self, sources: list[Source]) -> Proposal:
         items: list[Candidate] = []
         for index, source in enumerate(sources):
-            for raw in source.text.splitlines():
+            lines = source.text.splitlines()
+            for position, raw in enumerate(lines):
                 line = raw.strip()
+                normalized = " ".join(folded(line).split())
+                if normalized.startswith("pliego de condiciones para la seleccion"):
+                    quote = "\n".join(lines[position : position + 4]).strip()
+                    if len(quote) <= 1200 and not suspicious(quote):
+                        items.append(Candidate(kind="objeto", source=index, quote=quote))
+                clause = re.sub(r"^[a-z]\.\s+", "", normalized)
+                if (
+                    clause.startswith("todos los proponentes deben diligenciar")
+                    and not suspicious(line)
+                ):
+                    items.append(Candidate(kind="habilitante", source=index, quote=line))
+
                 label, separator, content = line.partition(":")
                 kind = LABELS.get(folded(label.strip()))
                 if separator and kind and content.strip() and not suspicious(line):

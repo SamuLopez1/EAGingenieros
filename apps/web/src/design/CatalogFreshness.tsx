@@ -1,3 +1,4 @@
+import { companyName } from "../brand";
 import { useEffect, useState } from "react";
 import type { OpportunityPage } from "../api/contracts";
 import { formatColombiaDateTime } from "./format";
@@ -21,7 +22,7 @@ export function CatalogFreshness({ page }: { page: OpportunityPage }) {
         Última sincronización finalizada (hora Colombia):{" "}
         {formatColombiaDateTime(page.latest_sync_finished_at)}. Umbral de antigüedad:{" "}
         {page.catalog_stale_after_hours ?? 24} horas (configuración técnica provisional, pendiente
-        de validación con EAG).
+        de validación con {companyName}).
       </p>
       {warning ? (
         <p className="banner banner-warn" role="status">

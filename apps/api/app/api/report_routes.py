@@ -107,7 +107,7 @@ def pdf(
     scope.lock()
     report = approved(scope, tools, revision)
     try:
-        content = render(report)
+        content = render(report, company=scope.settings.company_name)
     except Exception:
         raise DocumentError(422, "informe_no_renderizable") from None
     disposition = "attachment" if download else "inline"
@@ -288,7 +288,8 @@ def send(
     if utc(item.created_at) + RETRY_WINDOW <= utcnow():
         update_attempt(item, "incierto", utcnow())
     else:
-        outcome = transport.send(Mail(item.sender, item.recipient, item.link), f"report/{item.id}")
+        mail = Mail(item.sender, item.recipient, item.link, settings.company_name)
+        outcome = transport.send(mail, f"report/{item.id}")
         state: MailState = outcome.state
         if (state == "reintentar" and len(item.attempts) >= MAX_ATTEMPTS) or (
             state == "rechazado" and len(item.attempts) > 1
