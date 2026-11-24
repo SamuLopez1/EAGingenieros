@@ -1,8 +1,12 @@
 # Liciscope · Guion de grabación
 
-Liciscope es la empresa ficticia de la demostración. La ficha contiene
-**un proceso real de SECOP II y cero oportunidades sintéticas**. El perfil,
-sus soportes, las cuentas y la entrega de correo son de prueba.
+Liciscope es la empresa ficticia de la demostración. El catálogo local
+se alimenta de los procesos de SECOP II con estado **Publicado** y fecha
+de recepción futura al momento de la consulta. Conserva la ficha pública
+preparada para el video y cero oportunidades sintéticas. El perfil, sus
+soportes, las cuentas y la entrega de correo son de prueba. El histórico de
+todos los estados y años se puede consultar en la fuente oficial.
+[Catálogo histórico de SECOP II](https://www.datos.gov.co/d/p6dx-8zbt)
 
 | Dato | Valor |
 | --- | --- |
@@ -28,7 +32,7 @@ docker logs --tail 5 liciscope-clamd
 python scripts/mvp06_preview.py --recording --duration 3600
 ~~~
 
-Espera LICISCOPE_OK y QA_READY. Abre [Liciscope local](http://127.0.0.1:15178)
+Espera LICISCOPE_SECOP, LICISCOPE_OK y QA_READY. Abre [Liciscope local](http://127.0.0.1:15178)
 en una ventana privada nueva. El servidor local genera el secreto de descarga,
 inicia el worker, carga clamd y prepara el caso. El arranque comprueba el hash,
 la cita, el PDF privado y el correo simulado. Deja la comparación en borrador
@@ -36,7 +40,9 @@ y el buzón vacío para el recorrido. Ctrl+C desde la terminal de arranque cierr
 el ensayo y retira su base PostgreSQL desechable. Si se inició en segundo
 plano, desde la raíz ejecuta New-Item -ItemType File output/liciscope.stop
 y espera a que se libere el puerto 15178. Para repetir desde cero, inicia
-de nuevo el mismo comando.
+de nuevo el mismo comando. Para conservar una sesión anterior en el puerto
+15178, inicia otra con --recording-port 15179. Su marcador de cierre es
+output/liciscope-15179.stop.
 
 Usa la cuenta administradora de fixture definida en scripts/mvp06_preview.py.
 Hay también una cuenta de analista para comprobar permisos de consulta.
@@ -49,11 +55,42 @@ una cuenta empresarial en este entorno.
 | Tiempo | Acción y explicación |
 | --- | --- |
 | 0:00–0:20 | Mostrar el login de Liciscope. Iniciar sesión con los campos ya preparados fuera de cámara. Explicar que el catálogo viene de SECOP II. |
-| 0:20–0:45 | Abrir la ficha CM-06-IN-006-2026. Mostrar ID SECOP, entidad y referencia. Abrir **Expediente**, mostrar «Disponible» y el origen oficial del pliego. |
+| 0:20–0:45 | Mostrar el total del catálogo y **Sincronizar ahora**. A continuación filtrar por CM-06-IN-006-2026, abrir su ficha y mostrar el ID y el pliego oficial disponible en **Expediente**. |
 | 0:45–1:15 | Mostrar la extracción y pulsar **Generar resumen y requisitos**. Señalar el objeto en página 1 y el requisito del Formato 3 de experiencia en página 19. El localizador corresponde a la página del PDF. |
 | 1:15–1:50 | Pulsar **Comparar con Liciscope**. Mostrar «Revisión manual» para el requisito del Formato 3. Explicar que el soporte de la empresa está rotulado como sintético y queda pendiente de verificación. |
 | 1:50–2:10 | Completar la justificación de aprobación académica y pulsar **Aprobar comparación**. Abrir vista previa o descargar el PDF privado. Mostrar Liciscope, la revisión y una cita. La aprobación del informe conserva el resultado de revisión manual. |
 | 2:10–2:35 | Elegir el destinatario de prueba y pulsar **Enviar enlace privado**. Pulsar **Comprobar o reintentar envío** si aparece. Abrir **Buzón simulado**. Mostrar el único mensaje y que el enlace conduce al portal, que exige login en una ventana privada nueva. |
+
+## Verificar la conexión con SECOP II
+
+- **Sincronizar ahora** consulta todas las páginas del corte, muestra nuevas,
+  actualizadas y sin cambios, y refresca el listado. Solo el administrador
+  dispara una carga manual.
+- El servidor vuelve a consultar la fuente automáticamente cada tres minutos
+  mientras esté funcionando. Para una demostración más rápida usa
+  --recording-refresh 60. El catálogo visible consulta la copia local cada
+  20 segundos. Un proceso nuevo aparece tras la siguiente carga exitosa,
+  cuando ya está visible en datos abiertos y cumple el corte. Una demora
+  entre la publicación y la disponibilidad en el dataset depende de SECOP II.
+- La carga conserva lo previamente importado y usa el ID de SECOP como clave.
+  Al repetir el mismo corte, los IDs existentes mantienen su ficha y su
+  expediente. Si se agota el límite de páginas o la fuente falla, la
+  ejecución se marca como fallida y conserva lo ya cargado.
+- Para verificar altas con reloj controlado y sin publicar casos de prueba
+  en SECOP, ejecutar desde apps/api el test siguiente. Cambia la respuesta
+  de la fuente simulada entre dos cargas y verifica el alta y la idempotencia.
+
+~~~powershell
+python -m pytest -q tests/test_liciscope_catalog.py
+~~~
+
+En el ensayo en 15179 se comprobaron 2.893 fichas reales y cero
+sintéticas. El arranque incorporó 2.892 nuevas a la base local después
+de preparar la ficha 1. El botón y una ejecución automática consultaron
+el corte real y devolvieron 2.893 registros sin cambios. Chrome confirmó
+la paginación y la búsqueda de la ficha preparada. El alta de un ID nuevo
+entre consultas se ensayó offline. Durante la prueba de red no apareció
+una publicación nueva de la fuente.
 
 ## Evidencia y modalidad de correo
 

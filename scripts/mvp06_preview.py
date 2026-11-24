@@ -37,7 +37,12 @@ def main() -> None:
     parser.add_argument("--margin", action="store_true", help="Verifica escenarios de margen sintéticos")
     parser.add_argument("--shortlist", action="store_true", help="Verifica la lista corta sintética")
     parser.add_argument("--recording", action="store_true", help="Liciscope: ensayo local con pliego público")
+    parser.add_argument("--recording-port", type=int, choices=range(15178, 15188), default=15178)
+    parser.add_argument("--recording-refresh", type=int, default=180, metavar="SECONDS")
     args = parser.parse_args()
+    if not 30 <= args.recording_refresh <= 3600:
+        parser.error("--recording-refresh debe estar entre 30 y 3600 segundos.")
+
     if args.recording and any((args.public, args.dossier, args.extraction, args.comparison,
                                args.report, args.staffing, args.margin, args.shortlist, args.browser_cli)):
         parser.error("--recording tiene su propio recorrido")
@@ -57,7 +62,9 @@ def main() -> None:
     if args.dossier and args.public:
         parser.error("--dossier usa únicamente datos sintéticos")
     assert 1 <= args.duration <= 3600
-    ui_port, api_port, auth_port = (15178, 18108, 18118) if args.recording else (15176, 18106, 18116)
+    ui_port = args.recording_port if args.recording else 15176
+    api_port = ui_port + 2930
+    auth_port = api_port + 10
     for port in (api_port, ui_port, auth_port):
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", port))
@@ -98,7 +105,8 @@ def main() -> None:
     vite = None
     vite_config = None
     manifest = None
-    stop_file = ROOT / "output" / "liciscope.stop" if args.recording else None
+    stop_name = "liciscope.stop" if ui_port == 15178 else f"liciscope-{ui_port}.stop"
+    stop_file = ROOT / "output" / stop_name if args.recording else None
     engine = None
     extraction_stop = threading.Event()
     extraction_thread = None
@@ -179,6 +187,12 @@ def main() -> None:
             import liciscope_recording as recording
 
             recording.seed(engine, organization)
+            from app.db.session import create_session_factory
+
+            recording_sessions = create_session_factory(engine)
+            initial = recording.refresh_catalog(recording_sessions, trigger="inicial")
+            if initial.outcome != "completed" or initial.records_created == 0:
+                raise RuntimeError("No se completó el corte inicial del catálogo SECOP.")
         elif args.public:
             synchronize_public(engine)
         else:
@@ -374,6 +388,7 @@ def main() -> None:
         app = create_app(settings)
         if args.recording:
             inbox = recording.attach_mailbox(app, ui_port)
+            app.state.sync_service_factory = lambda: recording.catalog_service(recording_sessions)
         if args.report:
             from app.api.report_routes import gateway
             from app.report_mail import Mail, ProviderResult
@@ -419,7 +434,10 @@ def main() -> None:
 
         @app.middleware("http")
         async def prevent_secop(request: Request, call_next):
-            if request.method == "POST" and request.url.path == "/api/v1/sync-runs":
+            if (
+                not args.recording and request.method == "POST"
+                and request.url.path == "/api/v1/sync-runs"
+            ):
                 return JSONResponse(
                     status_code=503,
                     content={
@@ -536,7 +554,11 @@ def main() -> None:
         if stop_file is not None:
             stop_file.unlink(missing_ok=True)
         deadline = time.monotonic() + args.duration
+        next_sync = time.monotonic() + args.recording_refresh
         while time.monotonic() < deadline:
+            if args.recording and time.monotonic() >= next_sync:
+                recording.refresh_catalog(recording_sessions)
+                next_sync = time.monotonic() + args.recording_refresh
             if stop_file is not None and stop_file.exists():
                 stop_file.unlink()
                 break

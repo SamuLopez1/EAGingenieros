@@ -11,6 +11,7 @@ async (page) => {
   await page.getByRole('heading', { name: /Perfil empresarial.*Liciscope/ }).waitFor();
   await page.getByText('Formato 3 de experiencia · evidencia sintética', { exact: true }).first().waitFor();
   await page.getByRole('button', { name: 'Volver a oportunidades' }).click();
+  await page.goto(origin + '/?q=CM-06-IN-006-2026');
   await page.locator('a[href*="opportunity=1"]').first().click();
   await page.getByText('CO1.REQ.11405993', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Generar resumen y requisitos' }).click();

@@ -1,4 +1,4 @@
-import { companyName } from "./brand";
+import { companyName, simulatedMailbox } from "./brand";
 import { DossierSection } from "./DossierSection";
 import { ShortlistPanel, ShortlistToggle } from "./ShortlistPanel";
 import { useShortlist } from "./useShortlist";
@@ -101,6 +101,13 @@ export default function OpportunitiesPage({ role }: { role: "administrador" | "a
     window.addEventListener("popstate", pop);
     return () => window.removeEventListener("popstate", pop);
   }, []);
+  useEffect(() => {
+    if (!simulatedMailbox || selectedId || busy) return;
+    const refresh = window.setInterval(() => {
+      if (document.visibilityState === "visible") setRevision((value) => value + 1);
+    }, 20_000);
+    return () => window.clearInterval(refresh);
+  }, [selectedId, busy]);
   useEffect(() => {
     const controller = new AbortController();
     fetchOpportunities(JSON.parse(requestKey), controller.signal)
@@ -239,7 +246,7 @@ export default function OpportunitiesPage({ role }: { role: "administrador" | "a
     setBusy(true);
     setNotice("Sincronizando…");
     try {
-      const result = await triggerSync({ limit: 50 });
+      const result = await triggerSync(simulatedMailbox ? {} : { limit: 50 });
       const counts = `${result.records_created} nuevas, ${result.records_updated} actualizadas, ${result.records_unchanged} sin cambios.`;
       setNotice(
         result.outcome === "completed"
@@ -277,6 +284,11 @@ export default function OpportunitiesPage({ role }: { role: "administrador" | "a
               Consulta los procesos incorporados desde SECOP II. La decisión de participar requiere
               revisión humana.
             </p>
+            {simulatedMailbox ? <p>
+              Este catálogo incorpora procesos publicados con recepción futura.
+              {" "}<a href="https://www.datos.gov.co/d/p6dx-8zbt" target="_blank"
+                rel="noreferrer">Consultar el histórico completo de SECOP II</a>
+            </p> : null}
           </div>
           {role === "administrador" ? (
             <button className="btn btn-s" disabled={busy} onClick={() => void sync()}>

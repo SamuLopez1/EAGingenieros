@@ -8,16 +8,18 @@ from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlsplit
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 import httpx
 from app.api.report_routes import gateway
 from app.db.models import SyncRun
 from app.db.profile_models import ProfileEvidence, ProfileVersion
 from app.db.repository import SqlOpportunityRepository
+from app.db.sync_service import SyncService
 from app.documents.official import OfficialReference
 from app.profile import Entry, EvidenceReference
 from app.report_mail import Mail, ProviderResult
-from app.secop.client import normalise_record
+from app.secop.client import HttpxClient, SecopClient, normalise_record
 from fastapi.responses import HTMLResponse
 from pypdf import PdfReader
 from reportlab.pdfgen import canvas
@@ -32,6 +34,64 @@ PDF_URL = (
 )
 PDF_SHA = "a6f01faa1a4ebba3777299c47919811bba1a52c9e78878fa870ed3e79745b2d0"
 RECIPIENT = "buzon@liciscope.invalid"
+
+
+CATALOG_PROJECTION = (
+    "id_del_proceso,referencia_del_proceso,nombre_del_procedimiento,entidad,"
+    "estado_del_procedimiento,fase,modalidad_de_contratacion,fecha_de_publicacion_del,"
+    "fecha_de_ultima_publicaci,fecha_de_recepcion_de,departamento_entidad,ciudad_entidad,"
+    "urlproceso,precio_base"
+)
+
+
+class RecordingFeed(HttpxClient):
+    """Procesos publicados con recepción futura al inicio de cada ejecución."""
+
+    def __init__(self, now: datetime):
+        super().__init__()
+        cutoff = now.astimezone(ZoneInfo("America/Bogota")).strftime("%Y-%m-%dT%H:%M:%S")
+        self.where = (
+            f"estado_del_procedimiento = 'Publicado' AND fecha_de_recepcion_de > '{cutoff}'"
+        )
+
+    def get(self, url, *, params, timeout):
+        query = {**params, "$select": CATALOG_PROJECTION}
+        where = params.get("$where")
+        query["$where"] = f"({where}) AND ({self.where})" if where else self.where
+        query["$order"] = "id_del_proceso ASC, :id ASC"
+        return super().get(url, params=query, timeout=timeout)
+
+
+def catalog_service(factory, *, trigger="manual"):
+    session = factory()
+    return SyncService(
+        client=SecopClient(
+            http=RecordingFeed(datetime.now(UTC)),
+            page_size=750,
+            max_requests=16,
+            timeout=15,
+            max_retries=1,
+        ),
+        repository=SqlOpportunityRepository(session),
+        session=session,
+        trigger=trigger,
+    )
+
+
+def refresh_catalog(factory, *, trigger="programado"):
+    service = catalog_service(factory, trigger=trigger)
+    try:
+        outcome = service.run()
+        print(
+            f"LICISCOPE_SECOP modo={trigger} estado={outcome.outcome} "
+            f"nuevas={outcome.records_created} actualizadas={outcome.records_updated} "
+            f"sin_cambios={outcome.records_unchanged} consultas={outcome.requests_made} "
+            f"error={outcome.error_kind or '-'}",
+            flush=True,
+        )
+        return outcome
+    finally:
+        service.close()
 
 
 def seed(engine, organization):
@@ -189,9 +249,11 @@ def rehearse(origin: str, auth: str, inbox: dict[str, Mail]) -> None:
             return response
 
         assert call("GET", "/auth/session").json()["role"] == "administrador"
-        rows = call("GET", "/api/v1/opportunities").json()
-        (row,) = rows["items"]
-        assert rows["total"] == 1 and row["source_id"] == SOURCE
+        catalog = call("GET", "/api/v1/opportunities").json()
+        assert catalog["total"] > 1 and catalog["latest_sync_outcome"] == "completed"
+        rows = call("GET", "/api/v1/opportunities", params={"q": REFERENCE}).json()
+        row = next(item for item in rows["items"] if item["source_id"] == SOURCE)
+        print(f"LICISCOPE_CATALOGO total={catalog['total']} sinteticas=0", flush=True)
         base = f"/api/v1/opportunities/{row['id']}"
         docs = base + "/documents"
         doc = call("POST", f"{docs}/official/{DOCUMENT}").json()
