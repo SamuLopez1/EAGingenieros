@@ -50,6 +50,25 @@ Rellena los campos con la grabación pausada. Oculta la barra de autocompletado,
 las herramientas de desarrollo y la configuración del backend. Nunca uses
 una cuenta empresarial en este entorno.
 
+## Perfil privado de demostración
+
+El arranque incluye nueve registros ficticios y evidencia rotulada. Desde
+**Perfil empresarial** se puede mostrar la experiencia en adecuaciones
+escolares, la capacidad de interventoría, los equipos y la disponibilidad:
+
+| Cargo ficticio | Dedicación | Periodo de ejemplo | Revisión del dato |
+| --- | --- | --- | --- |
+| Director de interventoría | 50 % | 01/12/2026 a 31/03/2027 | Verificado en la fixture |
+| Residente de interventoría | 100 % | 01/12/2026 a 31/03/2027 | Verificado en la fixture |
+| Especialista ambiental | 25 % | 01/12/2026 a 31/03/2027 | Por confirmar |
+
+Cada soporte adicional tiene un localizador en el PDF sintético de ocho
+páginas. Los estados verificados se refieren a los registros de la
+demostración. El Formato 3 sigue en revisión manual y el capital de trabajo
+es un supuesto pendiente. Guardar una versión del perfil invalida la
+aprobación previa del expediente. Actualiza la comparación antes de emitir
+el PDF de la nueva revisión.
+
 ## Guion de 2 minutos y 35 segundos
 
 | Tiempo | Acción y explicación |

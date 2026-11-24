@@ -21,6 +21,7 @@ from app.profile import Entry, EvidenceReference
 from app.report_mail import Mail, ProviderResult
 from app.secop.client import HttpxClient, SecopClient, normalise_record
 from fastapi.responses import HTMLResponse
+from liciscope_profile import profile_pack
 from pypdf import PdfReader
 from reportlab.pdfgen import canvas
 from sqlalchemy.orm import Session
@@ -108,6 +109,8 @@ def seed(engine, organization):
     record = normalise_record(rows[0], fetched_at=now)
     assert record is not None
     profile_id = UUID(int=41)
+    pack_id = UUID(int=42)
+    entries, pack = profile_pack(pack_id)
     buffer = BytesIO()
     pdf = canvas.Canvas(buffer)
     pdf.drawString(60, 750, "Liciscope | EVIDENCIA SINTÉTICA · ejercicio académico")
@@ -141,6 +144,17 @@ def seed(engine, organization):
                 payload=data,
             )
         )
+        session.add(
+            ProfileEvidence(
+                id=pack_id,
+                organization_id=organization,
+                author_id=UUID(int=2),
+                created_at=now,
+                filename="liciscope-perfil-evidencia-sintetica.pdf",
+                sha256=sha256(pack).hexdigest(),
+                payload=pack,
+            )
+        )
         entry = Entry(
             category="experiencia",
             title="Formato 3 de experiencia · evidencia sintética",
@@ -153,7 +167,7 @@ def seed(engine, organization):
                 version=1,
                 author_id=UUID(int=2),
                 created_at=now,
-                entries=[entry.model_dump(mode="json")],
+                entries=[item.model_dump(mode="json") for item in [entry, *entries]],
             )
         )
         session.commit()
